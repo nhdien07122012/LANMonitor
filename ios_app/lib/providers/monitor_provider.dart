@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/host_model.dart';
+import '../models/metrics_model.dart';
 import '../services/lan_monitor_api.dart';
 
 class MonitorProvider extends ChangeNotifier {
