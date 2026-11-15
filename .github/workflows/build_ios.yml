@@ -219,9 +219,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.0.4
-          name: "LAN Monitor iOS v1.0.4"
-          body: "Bản v1.0.4: Biên dịch chuẩn iPhoneOS SDK cho Widget Extension, đồng bộ Bundle ID và định dạng plist nhị phân cho iOS Widget."
+          tag_name: v1.0.5
+          name: "LAN Monitor iOS v1.0.5"
+          body: "Bản v1.0.5: Tích hợp đầy đủ containerBackground cho iOS 17/18, chuyển sang WidgetBundle và ProgressView chuẩn Apple."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false
