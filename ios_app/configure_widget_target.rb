@@ -63,13 +63,14 @@ end
 main_target.add_dependency(extension_target)
 
 embed_phase = main_target.copy_files_build_phases.find do |phase|
-  phase.symbol_dst_subfolder_spec == :plugins
+  phase.dst_subfolder_spec.to_s == '13'
 end
 
 unless embed_phase
   embed_phase = project.new(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
   embed_phase.name = 'Embed App Extensions'
-  embed_phase.symbol_dst_subfolder_spec = :plugins
+  embed_phase.dst_subfolder_spec = '13'
+  embed_phase.dst_path = ''
   main_target.build_phases << embed_phase
 end
 

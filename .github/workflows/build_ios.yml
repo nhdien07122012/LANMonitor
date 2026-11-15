@@ -220,9 +220,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.0.6
-          name: "LAN Monitor iOS v1.0.6"
-          body: "Bản v1.0.6: Tích hợp native Xcode Widget Extension target, PkgInfo và đầy đủ tiêu chuẩn iOS 17/18 WidgetKit."
+          tag_name: v1.0.7
+          name: "LAN Monitor iOS v1.0.7"
+          body: "Bản v1.0.7: Biên dịch native Xcode target cho WidgetKit với Embed App Extensions và chuẩn hóa bundle."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false
