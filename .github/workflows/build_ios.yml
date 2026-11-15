@@ -31,12 +31,27 @@ jobs:
             flutter create --platforms=ios --org com.lanmonitor .
           fi
 
-      - name: Setup App Icon Assets (Light, Dark, Tinted)
+      - name: Inject Custom App Icons
         run: |
-          mkdir -p ios_app/ios/Runner/Assets.xcassets/AppIcon.appiconset
-          cp -f ios_app/assets/icons/* ios_app/ios/Runner/Assets.xcassets/AppIcon.appiconset/
-          echo "AppIcon assets copied successfully:"
-          ls -la ios_app/ios/Runner/Assets.xcassets/AppIcon.appiconset/
+          python3 -c "
+          import os, glob
+          from PIL import Image
+
+          appicon_dir = 'ios_app/ios/Runner/Assets.xcassets/AppIcon.appiconset'
+          logo_src = 'ios_app/assets/icons/AppIcon-Dark.png'
+
+          if os.path.exists(appicon_dir) and os.path.exists(logo_src):
+              src = Image.open(logo_src).convert('RGBA')
+              for png in glob.glob(os.path.join(appicon_dir, '*.png')):
+                  with Image.open(png) as orig:
+                      w, h = orig.size
+                  resized = src.resize((w, h), Image.Resampling.LANCZOS)
+                  resized.save(png, 'PNG')
+                  print(f'Replaced {png} ({w}x{h})')
+              print('Successfully injected custom app icons!')
+          else:
+              print('AppIcon dir or logo_src not found')
+          "
 
       - name: Configure iOS Permissions & Info.plist
         run: |
@@ -65,44 +80,6 @@ jobs:
               print('Successfully injected network permissions into Info.plist')
           else:
               print('Info.plist not found, will be created during build')
-          "
-
-      - name: Configure iOS Code Signing Bypass (Bypass Development Team check)
-        run: |
-          python3 -c "
-          import os, re
-
-          # 1. Update project.pbxproj with dummy team ID & disable code sign
-          pbx_path = 'ios_app/ios/Runner.xcodeproj/project.pbxproj'
-          if os.path.exists(pbx_path):
-              with open(pbx_path, 'r', encoding='utf-8') as f:
-                  content = f.read()
-
-              # Inject DevelopmentTeam in TargetAttributes
-              content = re.sub(
-                  r'(TargetAttributes\s*=\s*\{[^\}]*?\{\s*\n)',
-                  r'\1\t\t\t\t\t\tDevelopmentTeam = LANMONITOR0;\n',
-                  content
-              )
-
-              # Inject DEVELOPMENT_TEAM & disable signing in all buildSettings
-              content = re.sub(
-                  r'(PRODUCT_BUNDLE_IDENTIFIER\s*=\s*[^;]+;)',
-                  r'\1\n\t\t\t\tDEVELOPMENT_TEAM = LANMONITOR0;\n\t\t\t\tCODE_SIGN_STYLE = Manual;\n\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;',
-                  content
-              )
-
-              with open(pbx_path, 'w', encoding='utf-8') as f:
-                  f.write(content)
-              print('Patched project.pbxproj with DEVELOPMENT_TEAM successfully.')
-
-          # 2. Inject into Flutter xcconfig files
-          for cfg in ['Release.xcconfig', 'Debug.xcconfig']:
-              cfg_path = os.path.join('ios_app/ios/Flutter', cfg)
-              if os.path.exists(cfg_path):
-                  with open(cfg_path, 'a', encoding='utf-8') as f:
-                      f.write('\nDEVELOPMENT_TEAM=LANMONITOR0\nCODE_SIGNING_ALLOWED=NO\nCODE_SIGNING_REQUIRED=NO\nCODE_SIGN_IDENTITY=\n')
-                  print(f'Appended signing config to {cfg}')
           "
 
       - name: Install Flutter Dependencies
