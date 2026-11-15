@@ -31,6 +31,13 @@ jobs:
             flutter create --platforms=ios --org com.lanmonitor .
           fi
 
+      - name: Setup App Icon Assets (Light, Dark, Tinted)
+        run: |
+          mkdir -p ios_app/ios/Runner/Assets.xcassets/AppIcon.appiconset
+          cp -f ios_app/assets/icons/* ios_app/ios/Runner/Assets.xcassets/AppIcon.appiconset/
+          echo "AppIcon assets copied successfully:"
+          ls -la ios_app/ios/Runner/Assets.xcassets/AppIcon.appiconset/
+
       - name: Configure iOS Permissions & Info.plist
         run: |
           python3 -c "

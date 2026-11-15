@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/monitor_provider.dart';
 import '../widgets/host_card.dart';
 import 'settings_screen.dart';
+import 'widget_screen.dart';
 import '../models/host_model.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -133,6 +134,17 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+          IconButton(
+            icon: const Icon(CupertinoIcons.square_grid_2x2, size: 21),
+            color: const Color(0xFF10B981),
+            tooltip: 'Chế độ Widget / StandBy',
+            onPressed: () {
+              Navigator.push(
+                context,
+                CupertinoPageRoute(builder: (_) => const WidgetScreen()),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(CupertinoIcons.plus_circle, size: 22),

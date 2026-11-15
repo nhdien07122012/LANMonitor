@@ -219,6 +219,36 @@ class QuickControlSheet extends StatelessWidget {
               }).toList(),
             ),
           ],
+
+          // Action: Xóa máy khỏi danh sách
+          const SizedBox(height: 20),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFEF4444),
+                side: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(CupertinoIcons.trash, size: 18),
+              label: const Text('Xóa thiết bị này khỏi danh sách', style: TextStyle(fontWeight: FontWeight.w600)),
+              onPressed: () {
+                Navigator.pop(context);
+                _confirmAction(context, 'Xóa thiết bị', () {
+                  Provider.of<MonitorProvider>(context, listen: false).deleteHost(host.id);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Đã xóa "${host.name}"'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                });
+              },
+            ),
+          ),
         ],
       ),
     );

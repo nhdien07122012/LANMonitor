@@ -45,22 +45,16 @@ class MonitorProvider extends ChangeNotifier {
     _isAutoRefresh = prefs.getBool('is_auto_refresh') ?? true;
 
     final hostsJson = prefs.getString('hosts_list');
-    if (hostsJson != null && hostsJson.isNotEmpty) {
+    if (hostsJson != null) {
       try {
         final List list = json.decode(hostsJson);
         _hosts = list.map((e) => HostModel.fromJson(e)).toList();
       } catch (e) {
         debugPrint('Error loading hosts: $e');
       }
-    }
-
-    // Default sample hosts if empty
-    if (_hosts.isEmpty) {
-      _hosts = [
-        HostModel(id: '1', name: 'Máy cơ quan', ip: '192.168.1.10', port: 8765),
-        HostModel(id: '2', name: 'Talescale-Máy cơ quan', ip: '100.100.100.100', port: 8765),
-      ];
-      _saveHostsToPrefs();
+    } else {
+      // First-time app launch: start with clean empty list or single default
+      _hosts = [];
     }
 
     final appsJson = prefs.getString('custom_apps');

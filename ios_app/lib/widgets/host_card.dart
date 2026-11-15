@@ -1,7 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/host_model.dart';
 import '../models/metrics_model.dart';
+import '../providers/monitor_provider.dart';
 import 'ring_gauge.dart';
 import 'quick_control_sheet.dart';
 import '../screens/host_detail_screen.dart';
@@ -25,7 +27,7 @@ class HostCard extends StatelessWidget {
         ? const Color(0xFF10B981) // Emerald Online
         : (isOnline == false ? const Color(0xFFEF4444) : const Color(0xFF64748B));
 
-    return Container(
+    final cardContent = Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: cardBg,
@@ -224,6 +226,62 @@ class HostCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+
+    return Dismissible(
+      key: Key(host.id),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (direction) async {
+        return await showCupertinoDialog<bool>(
+          context: context,
+          builder: (ctx) => CupertinoAlertDialog(
+            title: const Text('Xóa thiết bị'),
+            content: Text('Bạn có chắc chắn muốn xóa "${host.name}" khỏi danh sách?'),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text('Hủy'),
+                onPressed: () => Navigator.pop(ctx, false),
+              ),
+              CupertinoDialogAction(
+                isDestructiveAction: true,
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Xóa'),
+              ),
+            ],
+          ),
+        );
+      },
+      onDismissed: (_) {
+        Provider.of<MonitorProvider>(context, listen: false).deleteHost(host.id);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã xóa "${host.name}"'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEF4444),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Icon(CupertinoIcons.trash, color: Colors.white, size: 22),
+            SizedBox(width: 6),
+            Text(
+              'Xóa',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+      child: cardContent,
     );
   }
 }
