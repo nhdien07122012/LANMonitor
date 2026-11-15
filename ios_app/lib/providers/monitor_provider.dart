@@ -49,6 +49,17 @@ class MonitorProvider extends ChangeNotifier {
       try {
         final List list = json.decode(hostsJson);
         _hosts = list.map((e) => HostModel.fromJson(e)).toList();
+
+        // Tự động dọn sạch các thiết bị mẫu mặc định (Máy cơ quan / Talescale-Máy cơ quan)
+        _hosts.removeWhere((h) =>
+          h.name == 'Máy cơ quan' ||
+          h.name.contains('Talescale-Máy') ||
+          h.ip == '192.168.1.10' ||
+          h.ip == '100.100.100.100' ||
+          h.id == '1' ||
+          h.id == '2'
+        );
+        _saveHostsToPrefs();
       } catch (e) {
         debugPrint('Error loading hosts: $e');
       }
@@ -149,6 +160,19 @@ class MonitorProvider extends ChangeNotifier {
 
   void deleteHost(String id) {
     _hosts.removeWhere((h) => h.id == id);
+    _saveHostsToPrefs();
+    notifyListeners();
+  }
+
+  void clearMockHosts() {
+    _hosts.removeWhere((h) =>
+      h.name == 'Máy cơ quan' ||
+      h.name.contains('Talescale-Máy') ||
+      h.ip == '192.168.1.10' ||
+      h.ip == '100.100.100.100' ||
+      h.id == '1' ||
+      h.id == '2'
+    );
     _saveHostsToPrefs();
     notifyListeners();
   }

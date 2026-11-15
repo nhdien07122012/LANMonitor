@@ -15,6 +15,8 @@ class HostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<MonitorProvider>(context, listen: false);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isOnline = host.isOnline;
 
@@ -252,10 +254,11 @@ class HostCard extends StatelessWidget {
         );
       },
       onDismissed: (_) {
-        Provider.of<MonitorProvider>(context, listen: false).deleteHost(host.id);
-        ScaffoldMessenger.of(context).showSnackBar(
+        provider.deleteHost(host.id);
+        scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('Đã xóa "${host.name}"'),
+            backgroundColor: const Color(0xFFEF4444),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),

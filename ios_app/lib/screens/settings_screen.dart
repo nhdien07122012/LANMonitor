@@ -122,7 +122,35 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Section 3: Hướng dẫn kết nối từ xa
+          // Section 3: Quản lý thiết bị
+          Text('QUẢN LÝ THIẾT BỊ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: secondaryText)),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cardBorder),
+            ),
+            child: ListTile(
+              leading: const Icon(CupertinoIcons.trash, color: Color(0xFFEF4444)),
+              title: Text('Xóa sạch 2 thiết bị mẫu (Máy cơ quan)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFFEF4444))),
+              subtitle: Text('Xóa triệt để các máy mẫu không kết nối được và chỉ giữ lại máy thật của bạn.', style: TextStyle(fontSize: 12, color: secondaryText)),
+              trailing: const Icon(CupertinoIcons.chevron_right, size: 16),
+              onTap: () {
+                provider.clearMockHosts();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Đã xóa sạch các thiết bị mẫu!'),
+                    backgroundColor: Color(0xFF10B981),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section 4: Hướng dẫn kết nối từ xa
           Text('KẾT NỐI TỪ XA QUA TAILSCALE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: secondaryText)),
           const SizedBox(height: 8),
           Container(

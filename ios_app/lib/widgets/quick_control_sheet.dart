@@ -44,19 +44,18 @@ class QuickControlSheet extends StatelessWidget {
   }
 
   void _triggerControl(BuildContext context, String action, {String? appPath, String? url}) async {
-    Navigator.pop(context);
     final provider = Provider.of<MonitorProvider>(context, listen: false);
-    final msg = await provider.sendControl(host, action, appPath: appPath, url: url);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          backgroundColor: msg.startsWith('Lỗi') ? Colors.red : const Color(0xFF0284C7),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    final msg = await provider.sendControl(host, action, appPath: appPath, url: url);
+    scaffoldMessenger.showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: msg.startsWith('Lỗi') ? Colors.red : const Color(0xFF0284C7),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -236,16 +235,40 @@ class QuickControlSheet extends StatelessWidget {
               icon: const Icon(CupertinoIcons.trash, size: 18),
               label: const Text('Xóa thiết bị này khỏi danh sách', style: TextStyle(fontWeight: FontWeight.w600)),
               onPressed: () {
-                Navigator.pop(context);
-                _confirmAction(context, 'Xóa thiết bị', () {
-                  Provider.of<MonitorProvider>(context, listen: false).deleteHost(host.id);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Đã xóa "${host.name}"'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                });
+                final provider = Provider.of<MonitorProvider>(context, listen: false);
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                final navigator = Navigator.of(context);
+
+                showCupertinoDialog(
+                  context: context,
+                  builder: (ctx) => CupertinoAlertDialog(
+                    title: const Text('Xác nhận Xóa thiết bị'),
+                    content: Text('Bạn có chắc muốn xóa thiết bị "${host.name}" khỏi danh sách không?'),
+                    actions: [
+                      CupertinoDialogAction(
+                        child: const Text('Hủy'),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                      CupertinoDialogAction(
+                        isDestructiveAction: true,
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          navigator.pop();
+                          provider.deleteHost(host.id);
+                          scaffoldMessenger.showSnackBar(
+                            SnackBar(
+                              content: Text('Đã xóa "${host.name}"'),
+                              backgroundColor: const Color(0xFFEF4444),
+                              behavior: SnackBarBehavior.floating,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        child: const Text('Thực hiện'),
+                      ),
+                    ],
+                  ),
+                );
               },
             ),
           ),

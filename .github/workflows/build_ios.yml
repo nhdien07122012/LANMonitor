@@ -165,9 +165,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.0.1
-          name: "LAN Monitor iOS v1.0.1"
-          body: "Tải trực tiếp file LANMonitor_iOS.ipa để cài vào iPhone qua Sideloadly."
+          tag_name: v1.0.2
+          name: "LAN Monitor iOS v1.0.2"
+          body: "Bản cập nhật v1.0.2: Tự động dọn dẹp các thiết bị mẫu, sửa triệt để nút xóa thiết bị và cập nhật giao diện Widget."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false
