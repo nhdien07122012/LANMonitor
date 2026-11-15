@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     name: Build iOS IPA
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       - name: Checkout Repository
@@ -150,13 +150,13 @@ jobs:
           fi
 
           echo "Found app bundle: $APP_PATH"
-          WIDGET_DIR="$APP_PATH/PlugIns/LANMonitorWidget.appex"
+          WIDGET_DIR="$APP_PATH/PlugIns/LANMonitorWidgetExtension.appex"
           mkdir -p "$WIDGET_DIR"
 
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           export SDKROOT="$SDK_PATH"
 
-          # 1. Compile LANMonitorWidget.swift with pure iPhoneOS SDK
+          # 1. Compile LANMonitorWidgetExtension using swiftc
           echo "Compiling LANMonitorWidget.swift using pure Apple iPhoneOS SDK..."
           xcrun --sdk iphoneos swiftc \
             -target arm64-apple-ios15.0 \
@@ -172,14 +172,14 @@ jobs:
             -Xlinker -rpath -Xlinker @executable_path/Frameworks \
             -Xlinker -rpath -Xlinker @executable_path/../../Frameworks \
             ios_app/LANMonitorWidget/LANMonitorWidget.swift \
-            -o "$WIDGET_DIR/LANMonitorWidget"
-          chmod +x "$WIDGET_DIR/LANMonitorWidget"
+            -o "$WIDGET_DIR/LANMonitorWidgetExtension"
+          chmod +x "$WIDGET_DIR/LANMonitorWidgetExtension"
 
           # 2. Extract exact bundle metadata from host Runner.app
           MAIN_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist")
           MAIN_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Info.plist")
           MAIN_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PATH/Info.plist")
-          WIDGET_BUNDLE_ID="${MAIN_BUNDLE_ID}.LANMonitorWidget"
+          WIDGET_BUNDLE_ID="${MAIN_BUNDLE_ID}.LANMonitorWidgetExtension"
 
           echo "Host App: Bundle ID = $MAIN_BUNDLE_ID | Version = $MAIN_VERSION | Build = $MAIN_BUILD"
           echo "Configuring Extension: Bundle ID = $WIDGET_BUNDLE_ID"
@@ -187,6 +187,8 @@ jobs:
           # 3. Synchronize Info.plist with host app and convert to binary format
           cp ios_app/LANMonitorWidget/Info.plist "$WIDGET_DIR/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $WIDGET_BUNDLE_ID" "$WIDGET_DIR/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable LANMonitorWidgetExtension" "$WIDGET_DIR/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName LANMonitorWidgetExtension" "$WIDGET_DIR/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MAIN_VERSION" "$WIDGET_DIR/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $MAIN_BUILD" "$WIDGET_DIR/Info.plist"
           plutil -convert binary1 "$WIDGET_DIR/Info.plist"
@@ -194,14 +196,22 @@ jobs:
           # 4. Generate standard Apple PkgInfo
           echo -n "XPC!????" > "$WIDGET_DIR/PkgInfo"
 
-          # 5. Verification
-          echo "=== LANMonitorWidget.appex Bundle Contents ==="
+          # 5. Ad-hoc codesigning with App Group entitlements (Inside-Out, exactly matching Gas Manager)
+          echo "Signing Extension with adhoc codesign & entitlements..."
+          codesign -f -s - --entitlements ios_app/LANMonitorWidget/LANMonitorWidget.entitlements "$WIDGET_DIR" || true
+
+          echo "Signing Host App with adhoc codesign & entitlements..."
+          codesign -f -s - --entitlements ios_app/App.entitlements "$APP_PATH" || true
+
+          # 6. Verification
+          echo "=== LANMonitorWidgetExtension.appex Bundle Contents ==="
           ls -la "$WIDGET_DIR"
           echo "=== Mach-O Binary Verification ==="
-          file "$WIDGET_DIR/LANMonitorWidget"
-          otool -l "$WIDGET_DIR/LANMonitorWidget" | grep -A 4 "LC_BUILD_VERSION" || true
-          echo "=== Info.plist XML Preview ==="
-          plutil -p "$WIDGET_DIR/Info.plist"
+          file "$WIDGET_DIR/LANMonitorWidgetExtension"
+          otool -l "$WIDGET_DIR/LANMonitorWidgetExtension" | grep -A 4 "LC_BUILD_VERSION" || true
+          echo "=== Code Signature Verification ==="
+          codesign -dvvv "$WIDGET_DIR" || true
+          codesign -dvvv "$APP_PATH" || true
 
       - name: Package Unsigned IPA (Payload)
         run: |
@@ -228,9 +238,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.0.8
-          name: "LAN Monitor iOS v1.0.8"
-          body: "Bản v1.0.8: Đã sửa triệt để tính năng xóa thiết bị mẫu và hoàn thiện WidgetKit (iOS 17/18 containerBackground, PkgInfo chuẩn Apple, đồng bộ bundle version)."
+          tag_name: v1.0.9
+          name: "LAN Monitor iOS v1.0.9"
+          body: "Bản v1.0.9: Chuẩn hóa toàn diện WidgetKit theo cấu trúc Gas Manager (LANMonitorWidgetExtension, App Group Entitlements, bên trong bên ngoài ad-hoc code-signing, @WidgetBundleBuilder, hỗ trợ iOS 17 & 18)."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false

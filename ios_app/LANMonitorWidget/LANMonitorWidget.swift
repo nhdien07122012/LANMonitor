@@ -195,21 +195,21 @@ struct LANMonitorWidgetEntryView: View {
                 SmallWidgetView(entry: entry)
             }
         }
+        .padding(12)
         .widgetBackground(Color(red: 15/255, green: 23/255, blue: 42/255))
     }
 }
 
-// iOS 17/18 containerBackground compatibility extension
+// iOS 17/18 containerBackground compatibility extension (matched with GasWidget)
 extension View {
     @ViewBuilder
     func widgetBackground(_ backgroundView: some View) -> some View {
         if #available(iOS 17.0, *) {
-            self.containerBackground(for: .widget) {
+            containerBackground(for: .widget) {
                 backgroundView
             }
         } else {
-            self.padding()
-                .background(backgroundView)
+            background(backgroundView)
         }
     }
 }
@@ -225,23 +225,13 @@ struct LANMonitorWidget: Widget {
         .configurationDisplayName("LAN Monitor")
         .description("Giám sát CPU, RAM, Ổ đĩa PC theo thời gian thực.")
         .supportedFamilies([.systemSmall, .systemMedium])
-        .contentMarginsDisabledIfAvailable()
-    }
-}
-
-extension WidgetConfiguration {
-    func contentMarginsDisabledIfAvailable() -> some WidgetConfiguration {
-        if #available(iOS 17.0, *) {
-            return self.contentMarginsDisabled()
-        } else {
-            return self
-        }
     }
 }
 
 // MARK: - Bundle
 @main
 struct LANMonitorWidgetBundle: WidgetBundle {
+    @WidgetBundleBuilder
     var body: some Widget {
         LANMonitorWidget()
     }

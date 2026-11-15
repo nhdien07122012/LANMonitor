@@ -7,19 +7,19 @@
     <key>CFBundleDisplayName</key>
     <string>LAN Monitor</string>
     <key>CFBundleExecutable</key>
-    <string>LANMonitorWidget</string>
+    <string>LANMonitorWidgetExtension</string>
     <key>CFBundleIdentifier</key>
-    <string>com.lanmonitor.lanMonitor.LANMonitorWidget</string>
+    <string>com.lanmonitor.lanMonitor.LANMonitorWidgetExtension</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>LANMonitorWidget</string>
+    <string>LANMonitorWidgetExtension</string>
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.8</string>
+    <string>1.0.9</string>
     <key>CFBundleVersion</key>
-    <string>8</string>
+    <string>9</string>
     <key>MinimumOSVersion</key>
     <string>15.0</string>
     <key>CFBundleSupportedPlatforms</key>
