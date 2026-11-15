@@ -33,25 +33,24 @@ jobs:
 
       - name: Inject Custom App Icons
         run: |
-          python3 -c "
-          import os, glob
-          from PIL import Image
+          LOGO_SRC="ios_app/assets/icons/AppIcon-Dark.png"
+          APPICON_DIR="ios_app/ios/Runner/Assets.xcassets/AppIcon.appiconset"
 
-          appicon_dir = 'ios_app/ios/Runner/Assets.xcassets/AppIcon.appiconset'
-          logo_src = 'ios_app/assets/icons/AppIcon-Dark.png'
-
-          if os.path.exists(appicon_dir) and os.path.exists(logo_src):
-              src = Image.open(logo_src).convert('RGBA')
-              for png in glob.glob(os.path.join(appicon_dir, '*.png')):
-                  with Image.open(png) as orig:
-                      w, h = orig.size
-                  resized = src.resize((w, h), Image.Resampling.LANCZOS)
-                  resized.save(png, 'PNG')
-                  print(f'Replaced {png} ({w}x{h})')
-              print('Successfully injected custom app icons!')
-          else:
-              print('AppIcon dir or logo_src not found')
-          "
+          if [ -d "$APPICON_DIR" ] && [ -f "$LOGO_SRC" ]; then
+            for img in "$APPICON_DIR"/*.png; do
+              if [ -f "$img" ]; then
+                W=$(sips -g pixelWidth "$img" | awk '/pixelWidth/ {print $2}')
+                H=$(sips -g pixelHeight "$img" | awk '/pixelHeight/ {print $2}')
+                if [ -n "$W" ] && [ -n "$H" ]; then
+                  sips -z "$H" "$W" "$LOGO_SRC" --out "$img" > /dev/null
+                  echo "Resized custom icon for $img to ${W}x${H}"
+                fi
+              fi
+            done
+            echo "Successfully injected custom app icons using native Apple sips!"
+          else
+            echo "AppIcon dir not found, skipping icon injection"
+          fi
 
       - name: Configure iOS Permissions & Info.plist
         run: |
