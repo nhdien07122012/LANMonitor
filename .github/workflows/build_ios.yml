@@ -1,0 +1,85 @@
+name: Build iOS IPA (LAN Monitor)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build iOS IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter & Environment
+        run: flutter doctor -v
+
+      - name: Initialize iOS Scaffolding if Needed
+        working-directory: ios_app
+        run: |
+          if [ ! -d "ios" ]; then
+            echo "Scaffolding iOS Xcode project..."
+            flutter create --platforms=ios --org com.lanmonitor .
+          fi
+
+      - name: Configure iOS Permissions & Info.plist
+        run: |
+          python3 -c "
+          import plistlib, os
+
+          plist_path = 'ios_app/ios/Runner/Info.plist'
+          if os.path.exists(plist_path):
+              with open(plist_path, 'rb') as f:
+                  pl = plistlib.load(f)
+              
+              # Allow HTTP requests in LAN / Tailscale
+              pl['NSAppTransportSecurity'] = {'NSAllowsArbitraryLoads': True}
+              
+              # Local Network permission for iOS 14+
+              pl['NSLocalNetworkUsageDescription'] = 'LAN Monitor kết nối đến mạng nội bộ để giám sát thông số phần cứng máy tính.'
+              
+              # Display Name
+              pl['CFBundleDisplayName'] = 'LAN Monitor'
+              
+              # Allow querying Microsoft Remote Desktop app
+              pl['LSApplicationQueriesSchemes'] = ['rdp']
+              
+              with open(plist_path, 'wb') as f:
+                  plistlib.dump(pl, f)
+              print('Successfully injected network permissions into Info.plist')
+          else:
+              print('Info.plist not found, will be created during build')
+          "
+
+      - name: Install Flutter Dependencies
+        working-directory: ios_app
+        run: flutter pub get
+
+      - name: Build iOS Release (Unsigned)
+        working-directory: ios_app
+        run: flutter build ios --release --no-codesign
+
+      - name: Package Unsigned IPA (Payload)
+        run: |
+          cd ios_app/build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r -9 ../../../LANMonitor_iOS.ipa Payload
+          cd ../../..
+          ls -lh LANMonitor_iOS.ipa
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LANMonitor_iOS_ipa
+          path: LANMonitor_iOS.ipa
+          retention-days: 14

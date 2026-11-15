@@ -1,0 +1,6 @@
+{
+  "port": 8765,
+  "token": "LANMONITOR-CHANGE-ME",
+  "name": "SRO130",
+  "interval": 1.0
+}

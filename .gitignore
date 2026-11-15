@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+build/
+
+# IDE / System
+.vscode/
+.idea/
+*.swp
+*.bak
+Thumbs.db
+Desktop.ini
+
+# Flutter / Dart
+ios_app/.dart_tool/
+ios_app/.packages
+ios_app/build/
+ios_app/.flutter-plugins
+ios_app/.flutter-plugins-dependencies
+ios_app/ios/Pods/
+ios_app/ios/.symlinks/
+ios_app/ios/Flutter/Flutter.framework
+ios_app/ios/Flutter/Flutter.podspec
