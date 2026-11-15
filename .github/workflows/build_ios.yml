@@ -89,6 +89,13 @@ jobs:
               print('Info.plist not found, will be created during build')
           "
 
+      - name: Configure Native Xcode Widget Extension Target
+        working-directory: ios_app
+        run: |
+          mkdir -p ios/LANMonitorWidget
+          cp -r LANMonitorWidget/* ios/LANMonitorWidget/
+          ruby configure_widget_target.rb
+
       - name: Configure iOS Code Signing Bypass (Disable Signing & Set Dummy Team)
         run: |
           python3 -c "
@@ -140,7 +147,7 @@ jobs:
           name: build-log-failure
           path: ios_app/build.log
 
-      - name: Compile Native iOS WidgetKit Extension
+      - name: Verify & Package Native iOS WidgetKit Extension
         run: |
           set -e
           APP_PATH=$(find ios_app/build/ios/iphoneos -name "*.app" -type d | head -n 1)
@@ -151,48 +158,42 @@ jobs:
 
           echo "Found app bundle: $APP_PATH"
           WIDGET_DIR="$APP_PATH/PlugIns/LANMonitorWidget.appex"
-          mkdir -p "$WIDGET_DIR"
 
-          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          echo "Using iPhoneOS SDK at $SDK_PATH"
-          export SDKROOT="$SDK_PATH"
+          if [ ! -f "$WIDGET_DIR/LANMonitorWidget" ]; then
+            echo "Widget binary not found in $WIDGET_DIR, compiling via pure SDK..."
+            mkdir -p "$WIDGET_DIR"
+            SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+            export SDKROOT="$SDK_PATH"
+            cp ios_app/LANMonitorWidget/Info.plist "$WIDGET_DIR/Info.plist"
+            plutil -convert binary1 "$WIDGET_DIR/Info.plist"
 
-          # Get exact CFBundleIdentifier from Runner.app/Info.plist
-          MAIN_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist" 2>/dev/null || echo "com.lanmonitor.lanMonitor")
-          echo "Main App Bundle ID: $MAIN_BUNDLE_ID"
-          WIDGET_BUNDLE_ID="${MAIN_BUNDLE_ID}.LANMonitorWidget"
-          echo "Widget Extension Bundle ID: $WIDGET_BUNDLE_ID"
+            xcrun --sdk iphoneos swiftc \
+              -target arm64-apple-ios15.0 \
+              -sdk "$SDK_PATH" \
+              -F "$SDK_PATH/System/Library/Frameworks" \
+              -framework WidgetKit \
+              -framework SwiftUI \
+              -framework Foundation \
+              -parse-as-library \
+              -O \
+              -Xlinker -syslibroot -Xlinker "$SDK_PATH" \
+              -Xlinker -rpath -Xlinker /System/Library/Frameworks \
+              -Xlinker -rpath -Xlinker @executable_path/Frameworks \
+              -Xlinker -rpath -Xlinker @executable_path/../../Frameworks \
+              ios_app/LANMonitorWidget/LANMonitorWidget.swift \
+              -o "$WIDGET_DIR/LANMonitorWidget"
+            chmod +x "$WIDGET_DIR/LANMonitorWidget"
+          fi
 
-          # Update Widget Info.plist with exact matching bundle ID and convert to binary
-          cp ios_app/ios_widget/Info.plist "$WIDGET_DIR/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $WIDGET_BUNDLE_ID" "$WIDGET_DIR/Info.plist" 2>/dev/null || true
-          plutil -convert binary1 "$WIDGET_DIR/Info.plist"
+          if [ -f "$WIDGET_DIR/Info.plist" ]; then
+            plutil -convert binary1 "$WIDGET_DIR/Info.plist"
+          fi
+          echo -n "XPC!????" > "$WIDGET_DIR/PkgInfo"
 
-          echo "Compiling LANMonitorWidget.swift with pure iPhoneOS SDK..."
-          xcrun --sdk iphoneos swiftc \
-            -target arm64-apple-ios15.0 \
-            -sdk "$SDK_PATH" \
-            -F "$SDK_PATH/System/Library/Frameworks" \
-            -framework WidgetKit \
-            -framework SwiftUI \
-            -framework Foundation \
-            -parse-as-library \
-            -O \
-            -Xlinker -syslibroot -Xlinker "$SDK_PATH" \
-            -Xlinker -rpath -Xlinker /System/Library/Frameworks \
-            -Xlinker -rpath -Xlinker @executable_path/Frameworks \
-            -Xlinker -rpath -Xlinker @executable_path/../../Frameworks \
-            ios_app/ios_widget/LANMonitorWidget.swift \
-            -o "$WIDGET_DIR/LANMonitorWidget"
-
-          chmod +x "$WIDGET_DIR/LANMonitorWidget"
-
-          echo "Verifying compiled binary:"
+          echo "Final verification of Widget Extension:"
+          ls -la "$WIDGET_DIR"
           file "$WIDGET_DIR/LANMonitorWidget"
           otool -l "$WIDGET_DIR/LANMonitorWidget" | grep -A 4 "LC_BUILD_VERSION" || true
-
-          echo "Successfully built LANMonitorWidget.appex:"
-          ls -la "$WIDGET_DIR"
 
       - name: Package Unsigned IPA (Payload)
         run: |
@@ -219,9 +220,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.0.5
-          name: "LAN Monitor iOS v1.0.5"
-          body: "Bản v1.0.5: Tích hợp đầy đủ containerBackground cho iOS 17/18, chuyển sang WidgetBundle và ProgressView chuẩn Apple."
+          tag_name: v1.0.6
+          name: "LAN Monitor iOS v1.0.6"
+          body: "Bản v1.0.6: Tích hợp native Xcode Widget Extension target, PkgInfo và đầy đủ tiêu chuẩn iOS 17/18 WidgetKit."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false
