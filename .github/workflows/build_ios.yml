@@ -34,7 +34,7 @@ jobs:
             flutter create --platforms=ios --org com.lanmonitor .
           fi
 
-      - name: Install Flutter Dependencies & Generate Podfile
+      - name: Install Flutter Dependencies
         working-directory: ios_app
         run: flutter pub get
 
@@ -50,7 +50,8 @@ jobs:
                 H=$(sips -g pixelHeight "$img" | awk '/pixelHeight/ {print $2}')
                 if [ -n "$W" ] && [ -n "$H" ]; then
                   sips -z "$H" "$W" "$LOGO_SRC" --out "$img" > /dev/null
-                  echo "Resized custom icon for $img to ${W}x${H}"
+                  sips -s hasAlpha no "$img" > /dev/null 2>&1 || true
+                  echo "Resized custom icon for $img to ${W}x${H} (No Alpha)"
                 fi
               fi
             done
@@ -117,32 +118,7 @@ jobs:
                   f.write(content)
               print('Patched project.pbxproj with DEVELOPMENT_TEAM successfully.')
 
-          # 2. Update Podfile post_install for CocoaPods bundle signing
-          podfile_path = 'ios_app/ios/Podfile'
-          if os.path.exists(podfile_path):
-              with open(podfile_path, 'r', encoding='utf-8') as f:
-                  p_content = f.read()
-              
-              if 'CODE_SIGNING_ALLOWED' not in p_content:
-                  replacement = '''post_install do |installer|
-  installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
-    target.build_configurations.each do |config|
-      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-      config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-      config.build_settings['DEVELOPMENT_TEAM'] = 'LANMONITOR0'
-    end
-  end
-end'''
-                  if 'post_install do |installer|' in p_content:
-                      p_content = re.sub(r'post_install do \|installer\|[\s\S]*?end\s*end', replacement, p_content)
-                  else:
-                      p_content += '\n' + replacement
-                  with open(podfile_path, 'w', encoding='utf-8') as f:
-                      f.write(p_content)
-                  print('Patched Podfile post_install successfully.')
-
-          # 3. Inject into Flutter xcconfig files
+          # 2. Inject into Flutter xcconfig files
           for cfg in ['Release.xcconfig', 'Debug.xcconfig']:
               cfg_path = os.path.join('ios_app/ios/Flutter', cfg)
               if os.path.exists(cfg_path):
@@ -156,18 +132,12 @@ end'''
         run: |
           flutter build ios --release --no-codesign 2>&1 | tee build.log
 
-      - name: Log Build Failure Details if any
+      - name: Upload Build Log if Failed
         if: failure()
-        run: |
-          mkdir -p debug
-          echo "=== BUILD LOG ===" > debug/error.log
-          cat ios_app/build.log >> debug/error.log 2>/dev/null || true
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -B build-failure
-          git add -f debug/error.log
-          git commit -m "ci: Log build failure details"
-          git push -f origin build-failure
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-failure
+          path: ios_app/build.log
 
       - name: Package Unsigned IPA (Payload)
         run: |
@@ -192,9 +162,10 @@ end'''
 
       - name: Create Direct GitHub Release (No Zip)
         uses: softprops/action-gh-release@v2
+        if: success()
         with:
-          tag_name: latest
-          name: "LAN Monitor iOS (Bản mới nhất)"
+          tag_name: v1.0.1
+          name: "LAN Monitor iOS v1.0.1"
           body: "Tải trực tiếp file LANMonitor_iOS.ipa để cài vào iPhone qua Sideloadly."
           files: LANMonitor_iOS.ipa
           draft: false
