@@ -130,6 +130,9 @@ class MonitorProvider extends ChangeNotifier {
         host.metrics = metrics;
         host.errorMessage = null;
         host.lastChecked = DateTime.now();
+
+        // Cập nhật thông số vào SharedPreferences cho iOS Widget đọc
+        _updateWidgetPrefs(host, metrics);
       } catch (e) {
         host.isOnline = false;
         host.errorMessage = e.toString().replaceAll('Exception: ', '');
@@ -139,6 +142,21 @@ class MonitorProvider extends ChangeNotifier {
 
     await Future.wait(futures);
     notifyListeners();
+  }
+
+  void _updateWidgetPrefs(HostModel host, MetricsModel metrics) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('widget_host', host.name);
+      await prefs.setString('widget_ip', host.ip);
+      await prefs.setInt('widget_port', host.port);
+      await prefs.setDouble('widget_cpu_val', metrics.cpuPercent);
+      await prefs.setDouble('widget_ram_val', metrics.ramPercent);
+      await prefs.setDouble('widget_disk_val', metrics.diskPercent);
+      if (_globalToken.isNotEmpty) {
+        await prefs.setString('widget_token', _globalToken);
+      }
+    } catch (_) {}
   }
 
   void addHost(HostModel host) {

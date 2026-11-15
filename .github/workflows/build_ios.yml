@@ -140,6 +140,41 @@ jobs:
           name: build-log-failure
           path: ios_app/build.log
 
+      - name: Compile Native iOS WidgetKit Extension
+        run: |
+          set -e
+          APP_PATH=$(find ios_app/build/ios/iphoneos -name "*.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: App bundle not found!"
+            exit 1
+          fi
+
+          echo "Found app bundle: $APP_PATH"
+          WIDGET_DIR="$APP_PATH/PlugIns/LANMonitorWidget.appex"
+          mkdir -p "$WIDGET_DIR"
+
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "Using iPhoneOS SDK at $SDK_PATH"
+
+          echo "Compiling LANMonitorWidget.swift with swiftc..."
+          xcrun swiftc \
+            -target arm64-apple-ios15.0 \
+            -sdk "$SDK_PATH" \
+            -F "$SDK_PATH/System/Library/Frameworks" \
+            -framework WidgetKit \
+            -framework SwiftUI \
+            -framework Foundation \
+            -parse-as-library \
+            -O \
+            ios_app/ios_widget/LANMonitorWidget.swift \
+            -o "$WIDGET_DIR/LANMonitorWidget"
+
+          chmod +x "$WIDGET_DIR/LANMonitorWidget"
+          cp ios_app/ios_widget/Info.plist "$WIDGET_DIR/Info.plist"
+
+          echo "Successfully built LANMonitorWidget.appex:"
+          ls -la "$WIDGET_DIR"
+
       - name: Package Unsigned IPA (Payload)
         run: |
           APP_PATH=$(find ios_app/build/ios/iphoneos -name "*.app" -type d | head -n 1)
@@ -165,9 +200,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.0.2
-          name: "LAN Monitor iOS v1.0.2"
-          body: "Bản cập nhật v1.0.2: Tự động dọn dẹp các thiết bị mẫu, sửa triệt để nút xóa thiết bị và cập nhật giao diện Widget."
+          tag_name: v1.0.3
+          name: "LAN Monitor iOS v1.0.3 (Native iOS WidgetKit)"
+          body: "Bản v1.0.3: Tích hợp tiện ích WidgetKit Native ngoài màn hình chính iPhone (Home Screen Widget) và khắc phục hoàn toàn danh sách thiết bị."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false
