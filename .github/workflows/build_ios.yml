@@ -81,6 +81,69 @@ jobs:
               print('Info.plist not found, will be created during build')
           "
 
+      - name: Configure iOS Code Signing Bypass (Disable Signing & Set Dummy Team)
+        run: |
+          python3 -c "
+          import os, re
+
+          # 1. Update project.pbxproj with dummy team ID & disable code sign
+          pbx_path = 'ios_app/ios/Runner.xcodeproj/project.pbxproj'
+          if os.path.exists(pbx_path):
+              with open(pbx_path, 'r', encoding='utf-8') as f:
+                  content = f.read()
+
+              # Inject DevelopmentTeam in TargetAttributes
+              content = re.sub(
+                  r'(TargetAttributes\s*=\s*\{[^\}]*?\{\s*\n)',
+                  r'\1\t\t\t\t\t\tDevelopmentTeam = LANMONITOR0;\n',
+                  content
+              )
+
+              # Inject DEVELOPMENT_TEAM & disable signing in all buildSettings
+              content = re.sub(
+                  r'(PRODUCT_BUNDLE_IDENTIFIER\s*=\s*[^;]+;)',
+                  r'\1\n\t\t\t\tDEVELOPMENT_TEAM = LANMONITOR0;\n\t\t\t\tCODE_SIGN_STYLE = Manual;\n\t\t\t\tCODE_SIGNING_ALLOWED = NO;\n\t\t\t\tCODE_SIGNING_REQUIRED = NO;',
+                  content
+              )
+
+              with open(pbx_path, 'w', encoding='utf-8') as f:
+                  f.write(content)
+              print('Patched project.pbxproj with DEVELOPMENT_TEAM successfully.')
+
+          # 2. Update Podfile post_install for CocoaPods bundle signing
+          podfile_path = 'ios_app/ios/Podfile'
+          if os.path.exists(podfile_path):
+              with open(podfile_path, 'r', encoding='utf-8') as f:
+                  p_content = f.read()
+              
+              if 'CODE_SIGNING_ALLOWED' not in p_content:
+                  replacement = '''post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+      config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+      config.build_settings['DEVELOPMENT_TEAM'] = 'LANMONITOR0'
+    end
+  end
+end'''
+                  if 'post_install do |installer|' in p_content:
+                      p_content = re.sub(r'post_install do \|installer\|[\s\S]*?end\s*end', replacement, p_content)
+                  else:
+                      p_content += '\n' + replacement
+                  with open(podfile_path, 'w', encoding='utf-8') as f:
+                      f.write(p_content)
+                  print('Patched Podfile post_install successfully.')
+
+          # 3. Inject into Flutter xcconfig files
+          for cfg in ['Release.xcconfig', 'Debug.xcconfig']:
+              cfg_path = os.path.join('ios_app/ios/Flutter', cfg)
+              if os.path.exists(cfg_path):
+                  with open(cfg_path, 'a', encoding='utf-8') as f:
+                      f.write('\nDEVELOPMENT_TEAM=LANMONITOR0\nCODE_SIGNING_ALLOWED=NO\nCODE_SIGNING_REQUIRED=NO\nCODE_SIGN_IDENTITY=\n')
+                  print(f'Appended signing config to {cfg}')
+          "
+
       - name: Install Flutter Dependencies
         working-directory: ios_app
         run: flutter pub get
