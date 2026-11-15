@@ -70,11 +70,15 @@ jobs:
 
       - name: Package Unsigned IPA (Payload)
         run: |
-          cd ios_app/build/ios/iphoneos
+          APP_PATH=$(find ios_app/build/ios/iphoneos -name "*.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: App bundle not found in build directory!"
+            exit 1
+          fi
+          echo "Packaging $APP_PATH into IPA..."
           mkdir -p Payload
-          cp -r Runner.app Payload/
-          zip -r -9 ../../../LANMonitor_iOS.ipa Payload
-          cd ../../..
+          cp -r "$APP_PATH" Payload/
+          zip -r -9 LANMonitor_iOS.ipa Payload
           ls -lh LANMonitor_iOS.ipa
 
       - name: Upload IPA Artifact
@@ -82,4 +86,5 @@ jobs:
         with:
           name: LANMonitor_iOS_ipa
           path: LANMonitor_iOS.ipa
+          if-no-files-found: error
           retention-days: 14
