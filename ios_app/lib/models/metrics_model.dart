@@ -66,6 +66,9 @@ class MetricsModel {
     return '${minutes}m';
   }
 
+  String get formattedDownloadRate => formatSpeed(downloadBps);
+  String get formattedUploadRate => formatSpeed(uploadBps);
+
   static String formatSpeed(double bps) {
     if (bps >= 1024 * 1024) {
       return '${(bps / (1024 * 1024)).toStringAsFixed(1)} MB/s';
