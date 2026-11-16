@@ -7,35 +7,29 @@
     <key>CFBundleDisplayName</key>
     <string>LAN Monitor</string>
     <key>CFBundleExecutable</key>
-    <string>LANMonitorWidget</string>
+    <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
-    <string>com.lanmonitor.lanMonitor.LANMonitorWidget</string>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>LANMonitorWidget</string>
+    <string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.3</string>
+    <string>1.1.3</string>
     <key>CFBundleVersion</key>
-    <string>3</string>
+    <string>13</string>
     <key>MinimumOSVersion</key>
     <string>15.0</string>
-    <key>UIDeviceFamily</key>
+    <key>CFBundleSupportedPlatforms</key>
     <array>
-        <integer>1</integer>
-        <integer>2</integer>
+        <string>iPhoneOS</string>
     </array>
     <key>NSExtension</key>
     <dict>
         <key>NSExtensionPointIdentifier</key>
         <string>com.apple.widgetkit-extension</string>
-    </dict>
-    <key>NSAppTransportSecurity</key>
-    <dict>
-        <key>NSAllowsArbitraryLoads</key>
-        <true/>
     </dict>
 </dict>
 </plist>

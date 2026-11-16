@@ -34,6 +34,10 @@ jobs:
             flutter create --platforms=ios --org com.lanmonitor .
           fi
 
+      - name: Configure AppDelegate for Widget AppGroup Synchronization
+        working-directory: ios_app
+        run: python3 patch_app_delegate.py
+
       - name: Install Flutter Dependencies
         working-directory: ios_app
         run: flutter pub get
@@ -210,8 +214,8 @@ jobs:
           with open(ext_plist, 'rb') as f:
               ext_pl = plistlib.load(f)
 
-          version = app_pl.get('CFBundleShortVersionString', '1.1.1')
-          build = app_pl.get('CFBundleVersion', '11')
+          version = app_pl.get('CFBundleShortVersionString', '1.1.3')
+          build = app_pl.get('CFBundleVersion', '13')
           app_id = app_pl.get('CFBundleIdentifier', 'com.lanmonitor.lanMonitor')
           min_os = app_pl.get('MinimumOSVersion', '15.0')
 
@@ -267,9 +271,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.1.2
-          name: "LAN Monitor iOS v1.1.2"
-          body: "Bản v1.1.2: Bổ sung hỗ trợ đầy đủ giao diện Light Mode và Dark Mode linh hoạt cho iOS Widget theo chuẩn theme ứng dụng, cập nhật quy chuẩn dự án và nhật ký thay đổi CHANGELOG.md."
+          tag_name: v1.1.3
+          name: "LAN Monitor iOS v1.1.3"
+          body: "Bản v1.1.3: Khắc phục triệt để lỗi Widget giữ dữ liệu cũ và đứng im khi mất kết nối máy chủ. Bổ sung cơ chế phát hiện ngắt kết nối đa tầng: hiển thị 'Mất kết nối' kèm chấm đỏ cảnh báo, tự động reset thông số về '--', hỗ trợ đồng bộ thời gian thực qua App Group và nhận diện timeout tự động độc lập."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false
