@@ -167,7 +167,7 @@ jobs:
               exit 1
             }
 
-      - name: Embed & Ad-hoc Codesign Native iOS WidgetKit Extension
+      - name: Embed, Synchronize Info.plist & Ad-hoc Codesign (Exact Gas Manager Architecture)
         run: |
           set -e
           APP_PATH=$(find ios_app/build/ios/iphoneos -name "*.app" -type d | head -n 1)
@@ -176,53 +176,82 @@ jobs:
             exit 1
           fi
 
-          echo "Found app bundle: $APP_PATH"
-          mkdir -p "$APP_PATH/PlugIns"
-
-          WIDGET_APPEX=$(find ios_app -name "LANMonitorWidgetExtension.appex" -type d | head -n 1)
+          WIDGET_APPEX=$(find ios_app/build_widget -name "LANMonitorWidgetExtension.appex" -type d | head -n 1)
           if [ -z "$WIDGET_APPEX" ]; then
             echo "ERROR: LANMonitorWidgetExtension.appex not found!"
             find ios_app -name "*appex*" || true
             exit 1
           fi
 
+          echo "Found app bundle: $APP_PATH"
           echo "Found Xcode-built widget extension: $WIDGET_APPEX"
-          cp -r "$WIDGET_APPEX" "$APP_PATH/PlugIns/"
-          TARGET_APPEX="$APP_PATH/PlugIns/LANMonitorWidgetExtension.appex"
 
-          echo "=== Content of LANMonitorWidgetExtension.appex (built by Xcode) ==="
-          ls -la "$TARGET_APPEX"
+          # 1. Create Payload folder directly (Matching Gas Manager packaging)
+          rm -rf Payload
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          TARGET_APP="Payload/$(basename "$APP_PATH")"
+          mkdir -p "$TARGET_APP/PlugIns"
 
-          # Synchronize versions with Runner.app
-          MAIN_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Info.plist")
-          MAIN_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PATH/Info.plist")
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MAIN_VERSION" "$TARGET_APPEX/Info.plist" || true
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $MAIN_BUILD" "$TARGET_APPEX/Info.plist" || true
-          plutil -convert binary1 "$TARGET_APPEX/Info.plist"
+          # 2. Copy extension into Payload/Runner.app/PlugIns/
+          cp -r "$WIDGET_APPEX" "$TARGET_APP/PlugIns/"
+          TARGET_APPEX="$TARGET_APP/PlugIns/LANMonitorWidgetExtension.appex"
 
-          echo -n "XPC!????" > "$TARGET_APPEX/PkgInfo"
+          # 3. Synchronize Info.plist using Python (100% reliable, guarantees CFBundleShortVersionString & CFBundleVersion)
+          python3 -c "
+          import plistlib, os
 
-          # Ad-hoc codesigning with App Group entitlements (Inside-Out, exactly matching Gas Manager)
+          app_plist = '$TARGET_APP/Info.plist'
+          ext_plist = '$TARGET_APPEX/Info.plist'
+
+          with open(app_plist, 'rb') as f:
+              app_pl = plistlib.load(f)
+
+          with open(ext_plist, 'rb') as f:
+              ext_pl = plistlib.load(f)
+
+          version = app_pl.get('CFBundleShortVersionString', '1.1.1')
+          build = app_pl.get('CFBundleVersion', '11')
+          app_id = app_pl.get('CFBundleIdentifier', 'com.lanmonitor.lanMonitor')
+          min_os = app_pl.get('MinimumOSVersion', '15.0')
+
+          ext_pl['CFBundleShortVersionString'] = version
+          ext_pl['CFBundleVersion'] = build
+          ext_pl['CFBundleIdentifier'] = f'{app_id}.LANMonitorWidgetExtension'
+          ext_pl['CFBundleDisplayName'] = 'LAN Monitor'
+          ext_pl['CFBundleName'] = 'LANMonitorWidgetExtension'
+          ext_pl['CFBundleExecutable'] = 'LANMonitorWidgetExtension'
+          ext_pl['MinimumOSVersion'] = min_os
+          ext_pl['CFBundlePackageType'] = 'XPC!'
+          ext_pl['NSExtension'] = {'NSExtensionPointIdentifier': 'com.apple.widgetkit-extension'}
+
+          with open(ext_plist, 'wb') as f:
+              plistlib.dump(ext_pl, f)
+
+          print('=== Synchronized Extension Info.plist Successfully ===')
+          for k in ['CFBundleIdentifier', 'CFBundleShortVersionString', 'CFBundleVersion', 'CFBundleDisplayName', 'MinimumOSVersion', 'NSExtension']:
+              print(f'  {k}: {ext_pl.get(k)}')
+          "
+
+          # Remove PkgInfo from .appex (Gas Manager does not have PkgInfo in .appex)
+          rm -f "$TARGET_APPEX/PkgInfo"
+
+          # 4. Ad-hoc codesigning with App Group entitlements directly inside Payload
           echo "Ad-hoc signing Extension with entitlements..."
           codesign -f -s - --entitlements ios_app/LANMonitorWidget/LANMonitorWidget.entitlements "$TARGET_APPEX" || true
 
           echo "Ad-hoc signing Host App with entitlements..."
-          codesign -f -s - --entitlements ios_app/App.entitlements "$APP_PATH" || true
+          codesign -f -s - --entitlements ios_app/App.entitlements "$TARGET_APP" || true
 
           echo "=== Code Signature Verification ==="
           codesign -dvvv "$TARGET_APPEX" || true
-          codesign -dvvv "$APP_PATH" || true
+          codesign -dvvv "$TARGET_APP" || true
 
-      - name: Package Unsigned IPA (Payload)
-        run: |
-          APP_PATH=$(find ios_app/build/ios/iphoneos -name "*.app" -type d | head -n 1)
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: App bundle not found in build directory!"
-            exit 1
-          fi
-          echo "Packaging $APP_PATH into IPA..."
-          mkdir -p Payload
-          cp -r "$APP_PATH" Payload/
+          echo "=== Content of Payload/Runner.app/PlugIns ==="
+          ls -la "$TARGET_APP/PlugIns"
+          ls -la "$TARGET_APPEX"
+
+          # 5. Zip Payload into IPA
           zip -r -9 LANMonitor_iOS.ipa Payload
           ls -lh LANMonitor_iOS.ipa
 
@@ -238,9 +267,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.1.0
-          name: "LAN Monitor iOS v1.1.0"
-          body: "Bản v1.1.0: Biên dịch native Xcode target LANMonitorWidgetExtension bằng xcodebuild (sinh đầy đủ Metadata.appintents, Apple Intents metadata, nhúng vào PlugIns và ký số ad-hoc chuẩn theo kiến trúc Gas Manager)."
+          tag_name: v1.1.1
+          name: "LAN Monitor iOS v1.1.1"
+          body: "Bản v1.1.1: Khắc phục triệt để lỗi hiển thị Widget trên iOS 17/18. Đồng bộ 100% CFBundleShortVersionString, CFBundleVersion, Bundle Identifier và cấu trúc Info.plist/Entitlements chuẩn tương thích tuyệt đối với kiến trúc của Gas Manager."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false

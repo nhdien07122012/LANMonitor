@@ -39,7 +39,7 @@ struct Provider: TimelineProvider {
     }
 
     private func createDefaultEntry() -> SimpleEntry {
-        let defaults = UserDefaults(suiteName: "group.com.lanmonitor.app") ?? UserDefaults.standard
+        let defaults = UserDefaults(suiteName: "group.com.lanmonitor.lanMonitor") ?? UserDefaults(suiteName: "group.com.lanmonitor.app") ?? UserDefaults.standard
         let host = defaults.string(forKey: "widget_host") ?? defaults.string(forKey: "flutter.widget_host") ?? "DELL5548"
         let ip = defaults.string(forKey: "widget_ip") ?? defaults.string(forKey: "flutter.widget_ip") ?? "100.66.18.111"
         let cpuValRaw = defaults.double(forKey: "widget_cpu_val")
