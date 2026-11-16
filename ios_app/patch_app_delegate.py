@@ -100,7 +100,7 @@ import WidgetKit
           defs.synchronize()
         }
       }
-      widgetChannel?.invokeMethod("openHostUrl", urlString)
+      widgetChannel?.invokeMethod("openHostUrl", arguments: urlString)
       return true
     }
     return super.application(app, open: url, options: options)
