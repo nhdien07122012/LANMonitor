@@ -6,10 +6,10 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ## [v1.1.2] - 2026-11-16 (Build 12)
 - **Mục tiêu thay đổi**: Bổ sung hỗ trợ đầy đủ giao diện Light Mode (chế độ sáng) và Dark Mode (chế độ tối) tự động cho iOS Home Screen Widget, đồng bộ màu sắc sắc nét theo đúng palette giao diện của ứng dụng Flutter; tích hợp bộ quy chuẩn `PROJECT_RULES.md`.
-- **Commit SHA**: *(Commit hiện tại)*
+- **Commit SHA**: `2c8d7df`
 - **Lệnh hoàn tác mẫu (Rollback)**:
   ```bash
-  git revert HEAD --no-edit
+  git revert 2c8d7df --no-edit
   ```
 - **Chi tiết kỹ thuật các file đã chỉnh sửa**:
   - `ios_app/LANMonitorWidget/LANMonitorWidget.swift`:
