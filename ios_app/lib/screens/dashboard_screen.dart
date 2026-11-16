@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../providers/monitor_provider.dart';
 import '../widgets/host_card.dart';
 import 'settings_screen.dart';
-import 'widget_screen.dart';
 import 'config_sync_screen.dart';
 import 'host_detail_screen.dart';
 import '../models/host_model.dart';
@@ -21,17 +20,6 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final provider = Provider.of<MonitorProvider>(context, listen: false);
-      provider.onOpenHostRequested = (host) {
-        if (mounted) {
-          Navigator.push(
-            context,
-            CupertinoPageRoute(builder: (_) => HostDetailScreen(host: host)),
-          );
-        }
-      };
-    });
   }
 
   @override
@@ -43,7 +31,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Khi app mở lại từ nền hoặc khi người dùng quay lại từ Widget
+      // Khi app mở lại từ màn hình nền
       Provider.of<MonitorProvider>(context, listen: false).refreshAll();
     }
   }
@@ -181,17 +169,6 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
               Navigator.push(
                 context,
                 CupertinoPageRoute(builder: (_) => const ConfigSyncScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(CupertinoIcons.square_grid_2x2, size: 21),
-            color: const Color(0xFF10B981),
-            tooltip: 'Chế độ Widget / StandBy',
-            onPressed: () {
-              Navigator.push(
-                context,
-                CupertinoPageRoute(builder: (_) => const WidgetScreen()),
               );
             },
           ),

@@ -4,6 +4,34 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.2.5] - 2026-11-16 (Build 22)
+- **Mục tiêu thay đổi**:
+  1. **Loại bỏ hoàn toàn iOS Home Screen Widget & WidgetKit Extension**:
+     - Xóa bỏ toàn bộ mã nguồn WidgetKit (`ios_app/LANMonitorWidget/`, `ios_app/ios_widget/`).
+     - Xóa kịch bản inject target Xcode `configure_widget_target.rb` và `patch_app_delegate.py`.
+     - Xóa bỏ App Groups entitlement (`App.entitlements`), giúp ứng dụng không còn phụ thuộc vào bất kỳ cấu hình quyền App Group phức tạp nào khi sideload qua E-Sign/AltStore.
+  2. **Loại bỏ các thành phần liên quan đến Widget trong ứng dụng Flutter**:
+     - Xóa màn hình `ios_app/lib/screens/widget_screen.dart` (màn hình Chế độ Widget / StandBy).
+     - Gỡ bỏ nút bấm Widget khỏi thanh công cụ AppBar trong `DashboardScreen`.
+     - Xóa toàn bộ kênh giao tiếp MethodChannel `com.lanmonitor/widget`, các phương thức đồng bộ `_syncHostsToWidget`, `_syncPrimaryHostToWidget`, `_syncWidget` trong `MonitorProvider`.
+  3. **Tối ưu hóa quy trình đóng gói & CI Build**:
+     - Đơn giản hóa workflow CI (`.github/workflows/build_ios.yml`): Loại bỏ bước biên dịch xcodebuild widget phụ, loại bỏ thư mục PlugIns và đồng bộ Info.plist extension. Ứng dụng được đóng gói Payload trực tiếp, nhanh chóng và dung lượng nhẹ hơn.
+  4. **Bảo toàn 100% các chức năng cốt lõi**:
+     - Tất cả các tính năng giám sát máy tính (IP nội bộ & Tailscale), cập nhật thông số CPU/RAM/Disk/Network/Uptime, điều khiển từ xa (tắt máy, khởi động lại, mở app, mở web link), và đồng bộ file cấu hình JSON/Gist được giữ nguyên hoàn toàn.
+- **Phiên bản & Tag**: `v1.2.5` (Build 22)
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert HEAD --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa / xóa bỏ**:
+  - Đã xóa: `ios_app/lib/screens/widget_screen.dart`, `ios_app/configure_widget_target.rb`, `ios_app/patch_app_delegate.py`, `ios_app/App.entitlements`, thư mục `ios_app/LANMonitorWidget/`, `ios_app/ios_widget/`.
+  - `ios_app/lib/screens/dashboard_screen.dart`: Gỡ bỏ import `widget_screen.dart`, bỏ listener deep link, gỡ bỏ IconButton Widget trên AppBar.
+  - `ios_app/lib/providers/monitor_provider.dart`: Gỡ bỏ MethodChannel `_widgetChannel`, gỡ bỏ `_syncHostsToWidget`, `_syncPrimaryHostToWidget`, `_syncWidget` và các khóa SharedPreferences liên quan.
+  - `.github/workflows/build_ios.yml`: Tinh gọn quy trình build iOS chuẩn, trực tiếp tạo Payload từ `Runner.app`.
+  - `ios_app/pubspec.yaml`: Nâng phiên bản lên `v1.2.5+22`.
+
+---
+
 ## [v1.2.4] - 2026-11-16 (Build 21)
 - **Mục tiêu thay đổi**:
   1. **Khắc phục triệt để lỗi Widget báo "Không có máy online / Tất cả máy đang tắt" khi cài đặt qua E-Sign / AltStore / Sideload**:

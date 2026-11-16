@@ -34,10 +34,6 @@ jobs:
             flutter create --platforms=ios --org com.lanmonitor .
           fi
 
-      - name: Configure AppDelegate for Widget AppGroup Synchronization
-        working-directory: ios_app
-        run: python3 patch_app_delegate.py
-
       - name: Install Flutter Dependencies
         working-directory: ios_app
         run: flutter pub get
@@ -86,26 +82,12 @@ jobs:
               # Allow querying Microsoft Remote Desktop app
               pl['LSApplicationQueriesSchemes'] = ['rdp']
               
-              # Deep linking URL scheme for Widget interaction
-              pl['CFBundleURLTypes'] = [{
-                  'CFBundleTypeRole': 'Editor',
-                  'CFBundleURLName': 'com.lanmonitor.lanMonitor',
-                  'CFBundleURLSchemes': ['lanmonitor']
-              }]
-              
               with open(plist_path, 'wb') as f:
                   plistlib.dump(pl, f)
               print('Successfully injected network permissions into Info.plist')
           else:
               print('Info.plist not found, will be created during build')
           "
-
-      - name: Configure Native Xcode Widget Extension Target
-        working-directory: ios_app
-        run: |
-          mkdir -p ios/LANMonitorWidget
-          cp -r LANMonitorWidget/* ios/LANMonitorWidget/
-          ruby configure_widget_target.rb
 
       - name: Configure iOS Code Signing Bypass (Disable Signing & Set Dummy Team)
         run: |
@@ -158,27 +140,7 @@ jobs:
           name: build-log-failure
           path: ios_app/build.log
 
-      - name: Build Native iOS WidgetKit Extension via xcodebuild
-        working-directory: ios_app
-        run: |
-          set -o pipefail
-          echo "=== Building LANMonitorWidgetExtension with xcodebuild ==="
-          xcodebuild \
-            -project ios/Runner.xcodeproj \
-            -scheme LANMonitorWidgetExtension \
-            -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath build_widget \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            build 2>&1 | tee widget_build.log || {
-              echo "=== XCODEBUILD FAILED: Showing error summary ==="
-              grep -E "error:|FAILED" widget_build.log | head -n 40
-              exit 1
-            }
-
-      - name: Embed, Synchronize Info.plist & Ad-hoc Codesign (Exact Gas Manager Architecture)
+      - name: Package iOS IPA (Standard Payload Packaging)
         run: |
           set -e
           APP_PATH=$(find ios_app/build/ios/iphoneos -name "*.app" -type d | head -n 1)
@@ -187,83 +149,18 @@ jobs:
             exit 1
           fi
 
-          WIDGET_APPEX=$(find ios_app/build_widget -name "LANMonitorWidgetExtension.appex" -type d | head -n 1)
-          if [ -z "$WIDGET_APPEX" ]; then
-            echo "ERROR: LANMonitorWidgetExtension.appex not found!"
-            find ios_app -name "*appex*" || true
-            exit 1
-          fi
-
           echo "Found app bundle: $APP_PATH"
-          echo "Found Xcode-built widget extension: $WIDGET_APPEX"
 
-          # 1. Create Payload folder directly (Matching Gas Manager packaging)
+          # 1. Create Payload folder directly
           rm -rf Payload
           mkdir -p Payload
           cp -r "$APP_PATH" Payload/
-          TARGET_APP="Payload/$(basename "$APP_PATH")"
-          mkdir -p "$TARGET_APP/PlugIns"
 
-          # 2. Copy extension into Payload/Runner.app/PlugIns/
-          cp -r "$WIDGET_APPEX" "$TARGET_APP/PlugIns/"
-          TARGET_APPEX="$TARGET_APP/PlugIns/LANMonitorWidgetExtension.appex"
+          # 2. Ad-hoc codesign Host App
+          echo "Ad-hoc signing Host App..."
+          codesign -f -s - "Payload/$(basename "$APP_PATH")" || true
 
-          # 3. Synchronize Info.plist using Python (100% reliable, guarantees CFBundleShortVersionString & CFBundleVersion)
-          python3 -c "
-          import plistlib, os
-
-          app_plist = '$TARGET_APP/Info.plist'
-          ext_plist = '$TARGET_APPEX/Info.plist'
-
-          with open(app_plist, 'rb') as f:
-              app_pl = plistlib.load(f)
-
-          with open(ext_plist, 'rb') as f:
-              ext_pl = plistlib.load(f)
-
-          version = app_pl.get('CFBundleShortVersionString', '1.2.1')
-          build = app_pl.get('CFBundleVersion', '18')
-          app_id = app_pl.get('CFBundleIdentifier', 'com.lanmonitor.lanMonitor')
-          min_os = app_pl.get('MinimumOSVersion', '15.0')
-
-          ext_pl['CFBundleShortVersionString'] = version
-          ext_pl['CFBundleVersion'] = build
-          ext_pl['CFBundleIdentifier'] = f'{app_id}.LANMonitorWidgetExtension'
-          ext_pl['CFBundleDisplayName'] = 'LAN Monitor'
-          ext_pl['CFBundleName'] = 'LANMonitorWidgetExtension'
-          ext_pl['CFBundleExecutable'] = 'LANMonitorWidgetExtension'
-          ext_pl['MinimumOSVersion'] = min_os
-          ext_pl['CFBundlePackageType'] = 'XPC!'
-          ext_pl['NSAppTransportSecurity'] = {'NSAllowsArbitraryLoads': True}
-          ext_pl['NSExtension'] = {'NSExtensionPointIdentifier': 'com.apple.widgetkit-extension'}
-
-          with open(ext_plist, 'wb') as f:
-              plistlib.dump(ext_pl, f)
-
-          print('=== Synchronized Extension Info.plist Successfully ===')
-          for k in ['CFBundleIdentifier', 'CFBundleShortVersionString', 'CFBundleVersion', 'CFBundleDisplayName', 'MinimumOSVersion', 'NSExtension']:
-              print(f'  {k}: {ext_pl.get(k)}')
-          "
-
-          # Remove PkgInfo from .appex (Gas Manager does not have PkgInfo in .appex)
-          rm -f "$TARGET_APPEX/PkgInfo"
-
-          # 4. Ad-hoc codesigning with App Group entitlements directly inside Payload
-          echo "Ad-hoc signing Extension with entitlements..."
-          codesign -f -s - --entitlements ios_app/LANMonitorWidget/LANMonitorWidget.entitlements "$TARGET_APPEX" || true
-
-          echo "Ad-hoc signing Host App with entitlements..."
-          codesign -f -s - --entitlements ios_app/App.entitlements "$TARGET_APP" || true
-
-          echo "=== Code Signature Verification ==="
-          codesign -dvvv "$TARGET_APPEX" || true
-          codesign -dvvv "$TARGET_APP" || true
-
-          echo "=== Content of Payload/Runner.app/PlugIns ==="
-          ls -la "$TARGET_APP/PlugIns"
-          ls -la "$TARGET_APPEX"
-
-          # 5. Zip Payload into IPA
+          # 3. Zip Payload into IPA
           zip -r -9 LANMonitor_iOS.ipa Payload
           ls -lh LANMonitor_iOS.ipa
 
@@ -279,9 +176,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.2.4
-          name: "LAN Monitor iOS v1.2.4"
-          body: "Bản v1.2.4: Khắc phục triệt để lỗi Widget báo 'Không có máy online' khi cài qua E-Sign/Sideload. Tự động dự phòng máy chủ Tailscale (100.66.18.111), lọc bỏ hoàn toàn các máy mẫu cũ, tăng timeout mạng lên 5s, bật hỗ trợ kết nối qua 4G/LTE/Cellular và sửa lỗi hiển thị tràn chữ header."
+          tag_name: v1.2.5
+          name: "LAN Monitor iOS v1.2.5"
+          body: "Bản v1.2.5: Loại bỏ hoàn toàn WidgetKit Extension, App Group và các thành phần liên quan đến Widget trong app theo yêu cầu người dùng. Giữ nguyên 100% tất cả tính năng giám sát máy tính, đồng bộ Gist, điều khiển từ xa."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false

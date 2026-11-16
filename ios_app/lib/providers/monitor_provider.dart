@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/host_model.dart';
@@ -9,7 +8,6 @@ import '../models/metrics_model.dart';
 import '../services/lan_monitor_api.dart';
 
 class MonitorProvider extends ChangeNotifier {
-  static const MethodChannel _widgetChannel = MethodChannel('com.lanmonitor/widget');
   List<HostModel> _hosts = [];
   String _globalToken = 'LANMONITOR-CHANGE-ME';
   int _refreshInterval = 2; // seconds
@@ -19,7 +17,6 @@ class MonitorProvider extends ChangeNotifier {
   // Cấu hình đồng bộ online từ URL
   String? _configSyncUrl;
   bool _autoSyncOnlineConfig = false;
-  void Function(HostModel)? onOpenHostRequested;
 
   // Apps and Links definitions
   Map<String, String> _customApps = {
@@ -47,44 +44,6 @@ class MonitorProvider extends ChangeNotifier {
 
   MonitorProvider() {
     _loadFromPrefs();
-    _setupDeepLinkHandler();
-  }
-
-  void _setupDeepLinkHandler() {
-    _widgetChannel.setMethodCallHandler((call) async {
-      if (call.method == 'openHostUrl' && call.arguments is String) {
-        handleOpenHostUrl(call.arguments as String);
-      }
-    });
-
-    // Kiểm tra URL pending khi app khởi động từ Widget tap
-    Future.delayed(const Duration(milliseconds: 500), () async {
-      try {
-        final pending = await _widgetChannel.invokeMethod<String>('getPendingOpenUrl');
-        if (pending != null && pending.isNotEmpty) {
-          handleOpenHostUrl(pending);
-        }
-      } catch (_) {}
-    });
-  }
-
-  void handleOpenHostUrl(String url) {
-    try {
-      final uri = Uri.parse(url);
-      final hostId = uri.queryParameters['id'];
-      final ip = uri.queryParameters['ip'];
-
-      HostModel? target;
-      if (hostId != null) {
-        target = _hosts.cast<HostModel?>().firstWhere((h) => h?.id == hostId, orElse: () => null);
-      }
-      if (target == null && ip != null) {
-        target = _hosts.cast<HostModel?>().firstWhere((h) => h?.ip == ip || h?.cleanIp == ip, orElse: () => null);
-      }
-      if (target != null && onOpenHostRequested != null) {
-        onOpenHostRequested!(target);
-      }
-    } catch (_) {}
   }
 
   Future<void> _loadFromPrefs() async {
@@ -142,7 +101,6 @@ class MonitorProvider extends ChangeNotifier {
     }
 
     notifyListeners();
-    _syncHostsToWidget();
     _startTimer();
     refreshAll();
 
@@ -207,159 +165,7 @@ class MonitorProvider extends ChangeNotifier {
     });
 
     await Future.wait(futures);
-
-    // Đồng bộ trạng thái danh sách máy mới nhất cho iOS Home Screen Widget
-    _syncHostsToWidget();
-
     notifyListeners();
-  }
-
-  Future<void> _syncHostsToWidget() async {
-    final hostsList = _hosts.map((h) => {
-      'id': h.id,
-      'name': h.name,
-      'ip': h.cleanIp,
-      'port': h.port,
-      'is_online': h.isOnline == true,
-      'status': h.isOnline == true ? 'Online' : (h.isOnline == false ? 'Mất kết nối' : 'Đang kết nối'),
-      'cpu': h.metrics?.cpuPercent ?? 0.0,
-      'ram': h.metrics?.ramPercent ?? 0.0,
-      'net_speed': h.metrics?.formattedDownloadRate ?? '--',
-      'uptime': h.metrics?.formattedUptime ?? '--',
-    }).toList();
-
-    final hostsJson = json.encode(hostsList);
-    final data = <String, dynamic>{
-      'hosts_count': _hosts.length,
-      'online_count': onlineCount,
-      'hosts_json': hostsJson,
-      'widget_hosts_json': hostsJson,
-      'widget_token': _globalToken,
-      'last_updated': DateTime.now().millisecondsSinceEpoch,
-    };
-
-    // Dự phòng lưu trực tiếp vào SharedPreferences
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('widget_hosts_json', hostsJson);
-      await prefs.setString('hosts_json', hostsJson);
-      await prefs.setString('widget_token', _globalToken);
-    } catch (_) {}
-
-    try {
-      await _widgetChannel.invokeMethod('updateWidgetHosts', data);
-    } catch (_) {}
-
-    _syncPrimaryHostToWidget();
-  }
-
-  void _syncPrimaryHostToWidget() {
-    if (_hosts.isNotEmpty) {
-      final primary = _hosts.first;
-      final hostToken = (primary.token != null && primary.token!.isNotEmpty)
-          ? primary.token!
-          : _globalToken;
-      final tailscale = primary.metrics?.tailscaleIp ?? '';
-
-      if (primary.isOnline == true && primary.metrics != null) {
-        final m = primary.metrics!;
-        _syncWidget(
-          hostName: primary.name,
-          ip: primary.ip,
-          tailscaleIp: tailscale,
-          port: primary.port,
-          token: hostToken,
-          isOnline: true,
-          cpu: m.cpuPercent,
-          ram: m.ramPercent,
-          disk: m.diskPercent,
-          downSpeed: '↓ ${m.formattedDownloadRate}',
-          upSpeed: '↑ ${m.formattedUploadRate}',
-          netSpeed: m.formattedDownloadRate,
-          uptime: m.formattedUptime,
-        );
-      } else {
-        // Mất kết nối hoặc offline: gửi tín hiệu ngắt kết nối và xóa thông số cũ
-        _syncWidget(
-          hostName: primary.name,
-          ip: primary.ip,
-          tailscaleIp: tailscale,
-          port: primary.port,
-          token: hostToken,
-          isOnline: false,
-        );
-      }
-    } else {
-      _syncWidget(
-        hostName: 'Chưa có máy',
-        ip: '--',
-        port: 8765,
-        isOnline: false,
-      );
-    }
-  }
-
-  Future<void> _syncWidget({
-    required String hostName,
-    required String ip,
-    String tailscaleIp = '',
-    int port = 8765,
-    String token = '',
-    required bool isOnline,
-    double cpu = 0.0,
-    double ram = 0.0,
-    double disk = 0.0,
-    String downSpeed = '↓ --',
-    String upSpeed = '↑ --',
-    String netSpeed = '--',
-    String uptime = '--',
-  }) async {
-    final status = isOnline ? 'Online' : 'Mất kết nối';
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final tokenToUse = token.isNotEmpty ? token : _globalToken;
-
-    final data = <String, dynamic>{
-      'widget_host': hostName,
-      'widget_ip': ip,
-      'widget_tailscale_ip': tailscaleIp,
-      'widget_port': port,
-      'widget_token': tokenToUse,
-      'widget_is_online': isOnline,
-      'widget_status': status,
-      'widget_cpu_val': isOnline ? cpu : 0.0,
-      'widget_ram_val': isOnline ? ram : 0.0,
-      'widget_disk_val': isOnline ? disk : 0.0,
-      'widget_down_speed': isOnline ? downSpeed : '↓ --',
-      'widget_up_speed': isOnline ? upSpeed : '↑ --',
-      'widget_net_speed': isOnline ? netSpeed : '--',
-      'widget_uptime': isOnline ? uptime : '--',
-      'widget_last_updated': timestamp,
-    };
-
-    // 1. Gửi qua MethodChannel đến native iOS để ghi vào App Group và gọi WidgetCenter.shared.reloadAllTimelines()
-    try {
-      await _widgetChannel.invokeMethod('updateWidget', data);
-    } catch (_) {}
-
-    // 2. Ghi song song vào SharedPreferences làm fallback
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('widget_host', hostName);
-      await prefs.setString('widget_ip', ip);
-      await prefs.setString('widget_tailscale_ip', tailscaleIp);
-      await prefs.setInt('widget_port', port);
-      await prefs.setString('widget_token', tokenToUse);
-      await prefs.setBool('widget_is_online', isOnline);
-      await prefs.setString('widget_status', status);
-      await prefs.setDouble('widget_cpu_val', isOnline ? cpu : 0.0);
-      await prefs.setDouble('widget_ram_val', isOnline ? ram : 0.0);
-      await prefs.setDouble('widget_disk_val', isOnline ? disk : 0.0);
-      await prefs.setString('widget_down_speed', isOnline ? downSpeed : '↓ --');
-      await prefs.setString('widget_up_speed', isOnline ? upSpeed : '↑ --');
-      await prefs.setString('widget_net_speed', isOnline ? netSpeed : '--');
-      await prefs.setString('widget_uptime', isOnline ? uptime : '--');
-      await prefs.setInt('widget_last_updated', timestamp);
-    } catch (_) {}
   }
 
   void addHost(HostModel host) {
@@ -382,7 +188,6 @@ class MonitorProvider extends ChangeNotifier {
   void deleteHost(String id) {
     _hosts.removeWhere((h) => h.id == id);
     _saveHostsToPrefs();
-    _syncPrimaryHostToWidget();
     notifyListeners();
   }
 
@@ -406,8 +211,6 @@ class MonitorProvider extends ChangeNotifier {
       ));
     }
     _saveHostsToPrefs();
-    _syncHostsToWidget();
-    _syncPrimaryHostToWidget();
     notifyListeners();
   }
 
@@ -499,7 +302,6 @@ class MonitorProvider extends ChangeNotifier {
     }
 
     notifyListeners();
-    _syncHostsToWidget();
     refreshAll();
 
     return {
