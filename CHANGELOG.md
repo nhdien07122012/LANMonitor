@@ -6,10 +6,10 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ## [v1.1.5] - 2026-11-16 (Build 15)
 - **Mục tiêu thay đổi**: Khắc phục triệt để vấn đề Widget không đồng bộ dữ liệu với PC. Áp dụng kiến trúc Direct Network Fetching độc lập (theo mô hình hoạt động của Gas Manager), cấp quyền `NSAppTransportSecurity` (`NSAllowsArbitraryLoads`) cho Widget Extension, hỗ trợ Widget tự động truy vấn HTTP trực tiếp tới PC Agent theo chu kỳ 1 phút, tự động chuyển vùng dự phòng giữa IP LAN và IP Tailscale.
-- **Commit SHA**: `PENDING_COMMIT_SHA`
+- **Commit SHA**: `009fe41`
 - **Lệnh hoàn tác mẫu (Rollback)**:
   ```bash
-  git revert PENDING_COMMIT_SHA --no-edit
+  git revert 009fe41 --no-edit
   ```
 - **Chi tiết kỹ thuật các file đã chỉnh sửa**:
   - `ios_app/LANMonitorWidget/LANMonitorWidget.swift` & `ios_app/ios_widget/LANMonitorWidget.swift`:
