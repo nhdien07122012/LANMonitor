@@ -6,10 +6,10 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ## [v1.1.6] - 2026-11-16 (Build 16)
 - **Mục tiêu thay đổi**: Khắc phục triệt để lỗi crash ứng dụng khi khởi động trên iPhone. Loại bỏ thao tác force unwrap (`as!`) `rootViewController` trong `AppDelegate.swift`, hoàn tất khôi phục thông tin cấu hình máy chủ mặc định (LAN & Tailscale) và loại bỏ cơ chế xóa nhầm thiết bị khi tải app. Sửa lỗi thanh tiến trình Widget không hiển thị bằng cách xây dựng lại thanh bar bằng `GeometryReader` độc lập tương thích mọi phiên bản iOS (iOS 15 đến iOS 26+).
-- **Commit SHA**: `PENDING_COMMIT_SHA`
+- **Commit SHA**: `d6a5203`
 - **Lệnh hoàn tác mẫu (Rollback)**:
   ```bash
-  git revert PENDING_COMMIT_SHA --no-edit
+  git revert d6a5203 --no-edit
   ```
 - **Chi tiết kỹ thuật các file đã chỉnh sửa**:
   - `ios_app/patch_app_delegate.py`:
