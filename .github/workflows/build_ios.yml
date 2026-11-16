@@ -267,9 +267,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.1.1
-          name: "LAN Monitor iOS v1.1.1"
-          body: "Bản v1.1.1: Khắc phục triệt để lỗi hiển thị Widget trên iOS 17/18. Đồng bộ 100% CFBundleShortVersionString, CFBundleVersion, Bundle Identifier và cấu trúc Info.plist/Entitlements chuẩn tương thích tuyệt đối với kiến trúc của Gas Manager."
+          tag_name: v1.1.2
+          name: "LAN Monitor iOS v1.1.2"
+          body: "Bản v1.1.2: Bổ sung hỗ trợ đầy đủ giao diện Light Mode và Dark Mode linh hoạt cho iOS Widget theo chuẩn theme ứng dụng, cập nhật quy chuẩn dự án và nhật ký thay đổi CHANGELOG.md."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false

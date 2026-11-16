@@ -1,7 +1,7 @@
 name: lan_monitor
 description: "LAN Monitor Dashboard for iOS - Real-time PC Hardware & System Monitoring"
 publish_to: "none"
-version: 1.1.1+11
+version: 1.1.2+12
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
