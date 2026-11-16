@@ -4,6 +4,41 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.2.0] - 2026-11-16 (Build 17)
+- **Mục tiêu thay đổi**:
+  1. Chuyển đổi Widget từ theo dõi chi tiết 1 máy thành **Widget Giám sát Trạng thái Toàn bộ Máy tính (Hosts Status Overview)**: hiển thị danh sách các máy, trạng thái Online/Offline, số lượng máy đang chạy; hỗ trợ bấm trực tiếp vào từng máy trên widget để mở app và điều hướng thẳng đến màn hình chi tiết thông số qua deep link (`lanmonitor://host?id=...`).
+  2. Bổ sung tính năng **Đồng bộ và Nạp Cấu hình `dashboard_config.json`** chuẩn như phiên bản Windows: hỗ trợ đồng bộ Online qua URL, dán JSON từ bộ nhớ tạm, khôi phục từ file gốc và xuất cấu hình (Export).
+- **Commit SHA**: `PENDING_COMMIT_SHA`
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert PENDING_COMMIT_SHA --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa**:
+  - `ios_app/LANMonitorWidget/LANMonitorWidget.swift` & `ios_app/ios_widget/LANMonitorWidget.swift`:
+    - Thay thế mô hình `SimpleEntry` cũ bằng mô hình đa thiết bị `HostWidgetItem` và `SimpleEntry(hosts: [HostWidgetItem], onlineCount: Int, totalCount: Int)`.
+    - `SmallWidgetView` (.systemSmall): Hiển thị danh sách 3 máy với chấm trạng thái xanh/đỏ, IP, CPU% và badge tổng quan `● online/total`, tích hợp `.widgetURL` mở app.
+    - `MediumWidgetView` (.systemMedium): Hiển thị header badge số máy đang chạy, danh sách thẻ máy tính tích hợp `Link(destination: URL(string: "lanmonitor://host?id=..."))` cho phép chạm vào từng máy để mở trực tiếp thông số máy đó.
+    - Duy trì cơ chế kiểm tra mạng trực tiếp độc lập (`URLSession`) trong `getTimeline()`.
+  - `ios_app/patch_app_delegate.py`:
+    - Bổ sung `application(_:open:options:)` xử lý deep link URL scheme `lanmonitor://`, lưu `pending_open_url` và gửi event `openHostUrl` vào Flutter.
+    - Bổ sung xử lý MethodChannel `updateWidgetHosts` và `getPendingOpenUrl`.
+  - `.github/workflows/build_ios.yml`:
+    - Đăng ký `CFBundleURLTypes` với URL scheme `lanmonitor` trong `Runner/Info.plist`.
+  - `ios_app/lib/screens/config_sync_screen.dart`:
+    - Tạo mới màn hình Quản lý & Đồng bộ cấu hình `dashboard_config.json`: Đồng bộ online qua URL, dán JSON từ Clipboard, khôi phục từ file gốc, xuất file JSON.
+  - `ios_app/lib/providers/monitor_provider.dart`:
+    - Bổ sung hàm `importConfigJson()`, `syncConfigFromUrl()`, `loadBundledConfig()`, `exportConfigJson()`, `_syncHostsToWidget()`.
+    - Lắng nghe deep link `openHostUrl` và điều hướng người dùng tới máy được chọn.
+  - `ios_app/lib/screens/dashboard_screen.dart` & `ios_app/lib/screens/settings_screen.dart`:
+    - Bổ sung icon và menu truy cập nhanh màn hình Đồng bộ `dashboard_config.json`.
+    - Xử lý mở `HostDetailScreen` tự động khi nhận tín hiệu từ Widget tap.
+  - `ios_app/assets/dashboard_config.json`:
+    - Sao chép tệp cấu hình mẫu từ thư mục gốc vào `assets/` của ứng dụng.
+  - `ios_app/pubspec.yaml`, `ios_app/configure_widget_target.rb`, `ios_app/LANMonitorWidget/Info.plist`, `ios_app/ios_widget/Info.plist`:
+    - Đồng bộ nâng phiên bản lên `v1.2.0` (Build `17`).
+
+---
+
 ## [v1.1.6] - 2026-11-16 (Build 16)
 - **Mục tiêu thay đổi**: Khắc phục triệt để lỗi crash ứng dụng khi khởi động trên iPhone. Loại bỏ thao tác force unwrap (`as!`) `rootViewController` trong `AppDelegate.swift`, hoàn tất khôi phục thông tin cấu hình máy chủ mặc định (LAN & Tailscale) và loại bỏ cơ chế xóa nhầm thiết bị khi tải app. Sửa lỗi thanh tiến trình Widget không hiển thị bằng cách xây dựng lại thanh bar bằng `GeometryReader` độc lập tương thích mọi phiên bản iOS (iOS 15 đến iOS 26+).
 - **Commit SHA**: `d6a5203`

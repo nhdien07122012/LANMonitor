@@ -5,10 +5,33 @@ import '../providers/monitor_provider.dart';
 import '../widgets/host_card.dart';
 import 'settings_screen.dart';
 import 'widget_screen.dart';
+import 'config_sync_screen.dart';
+import 'host_detail_screen.dart';
 import '../models/host_model.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<MonitorProvider>(context, listen: false);
+      provider.onOpenHostRequested = (host) {
+        if (mounted) {
+          Navigator.push(
+            context,
+            CupertinoPageRoute(builder: (_) => HostDetailScreen(host: host)),
+          );
+        }
+      };
+    });
+  }
 
   void _showAddHostDialog(BuildContext context) {
     final nameCtrl = TextEditingController();
@@ -115,8 +138,8 @@ class DashboardScreen extends StatelessWidget {
           // Thống kê nhanh Online/Offline
           Center(
             child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              margin: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
                 borderRadius: BorderRadius.circular(12),
@@ -134,6 +157,17 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+          IconButton(
+            icon: const Icon(CupertinoIcons.arrow_2_circlepath_circle, size: 21),
+            color: const Color(0xFF0284C7),
+            tooltip: 'Đồng bộ cấu hình JSON',
+            onPressed: () {
+              Navigator.push(
+                context,
+                CupertinoPageRoute(builder: (_) => const ConfigSyncScreen()),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(CupertinoIcons.square_grid_2x2, size: 21),
@@ -172,7 +206,7 @@ class DashboardScreen extends StatelessWidget {
             ? ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
-                  SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.22),
                   Center(
                     child: Column(
                       children: [
@@ -184,8 +218,24 @@ class DashboardScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Nhấn nút "+" ở góc trên để thêm máy tính giám sát.',
+                          'Nhấn "+" để thêm máy hoặc nút đồng bộ JSON phía trên.',
                           style: TextStyle(fontSize: 13, color: secondaryText),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0284C7),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: const Icon(CupertinoIcons.arrow_2_circlepath_circle, size: 16),
+                          label: const Text('Đồng bộ dashboard_config.json'),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              CupertinoPageRoute(builder: (_) => const ConfigSyncScreen()),
+                            );
+                          },
                         ),
                       ],
                     ),

@@ -1,0 +1,29 @@
+{
+  "token": "LANMONITOR-CHANGE-ME",
+  "theme": "dark",
+  "hosts": [
+    {
+      "name": "Máy cơ quan",
+      "ip": "192.168.1.10"
+    },
+    {
+      "name": "Talescale-Máy cơ quan",
+      "ip": "100.100.100.100"
+    }
+  ],
+  "apps": {
+    "Notepad": "notepad.exe",
+    "Chrome": "chrome.exe",
+    "Taskmgr": "taskmgr.exe",
+    "VM-Manager": "C:\\Users\\NGUYENDIEN\\Documents\\VSCODE\\VM-MANAGER\\dist\\VM-Manager.exe",
+    "IDM Trial Reset": "C:\\Users\\NGUYENDIEN\\Desktop\\IDM Trial Reset.exe"
+  },
+  "links": {
+    "Google": "https://google.com",
+    "YouTube": "https://youtube.com"
+  },
+  "notify_offline": true,
+  "hide_offline": false,
+  "minimal_style": "digital_pill",
+  "minimal_layout": "vertical"
+}

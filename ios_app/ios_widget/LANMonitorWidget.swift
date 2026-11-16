@@ -3,49 +3,70 @@ import SwiftUI
 import Foundation
 
 // MARK: - Models
-struct SimpleEntry: TimelineEntry {
-    let date: Date
-    let hostName: String
+struct HostWidgetItem: Codable, Identifiable {
+    let id: String
+    let name: String
     let ip: String
-    let status: String
-    let isOnline: Bool
-    let cpu: String
-    let cpuPercent: Double
-    let ram: String
-    let ramPercent: Double
-    let disk: String
-    let diskPercent: Double
-    let downloadSpeed: String
-    let uploadSpeed: String
-    let netSpeed: String
-    let uptime: String
+    let port: Int
+    var isOnline: Bool
+    var status: String
+    var cpuPercent: Double
+    var ramPercent: Double
+    var netSpeed: String
+    var uptime: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, ip, port, status
+        case isOnline = "is_online"
+        case cpuPercent = "cpu"
+        case ramPercent = "ram"
+        case netSpeed = "net_speed"
+        case uptime
+    }
+
+    init(id: String, name: String, ip: String, port: Int = 8765, isOnline: Bool = false, status: String = "Mất kết nối", cpuPercent: Double = 0.0, ramPercent: Double = 0.0, netSpeed: String = "--", uptime: String = "--") {
+        self.id = id
+        self.name = name
+        self.ip = ip
+        self.port = port
+        self.isOnline = isOnline
+        self.status = status
+        self.cpuPercent = cpuPercent
+        self.ramPercent = ramPercent
+        self.netSpeed = netSpeed
+        self.uptime = uptime
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? container.decodeIfPresent(String.self, forKey: .id)) ?? UUID().uuidString
+        name = (try? container.decodeIfPresent(String.self, forKey: .name)) ?? "PC"
+        ip = (try? container.decodeIfPresent(String.self, forKey: .ip)) ?? "127.0.0.1"
+        port = (try? container.decodeIfPresent(Int.self, forKey: .port)) ?? 8765
+        isOnline = (try? container.decodeIfPresent(Bool.self, forKey: .isOnline)) ?? false
+        status = (try? container.decodeIfPresent(String.self, forKey: .status)) ?? (isOnline ? "Online" : "Mất kết nối")
+        cpuPercent = (try? container.decodeIfPresent(Double.self, forKey: .cpuPercent)) ?? 0.0
+        ramPercent = (try? container.decodeIfPresent(Double.self, forKey: .ramPercent)) ?? 0.0
+        netSpeed = (try? container.decodeIfPresent(String.self, forKey: .netSpeed)) ?? "--"
+        uptime = (try? container.decodeIfPresent(String.self, forKey: .uptime)) ?? "--"
+    }
 }
 
 struct AgentMetricsResponse: Codable {
     let cpu_percent: Double?
     let ram_percent: Double?
-    let disk_percent: Double?
     let download_bps: Double?
-    let upload_bps: Double?
     let uptime_sec: Double?
-    let hostname: String?
-    let ip: String?
-    let tailscale_ip: String?
 
     enum CodingKeys: String, CodingKey {
-        case cpu_percent, ram_percent, disk_percent, download_bps, upload_bps, uptime_sec, hostname, ip, tailscale_ip
+        case cpu_percent, ram_percent, download_bps, uptime_sec
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         cpu_percent = try? container.decodeIfPresent(Double.self, forKey: .cpu_percent)
         ram_percent = try? container.decodeIfPresent(Double.self, forKey: .ram_percent)
-        disk_percent = try? container.decodeIfPresent(Double.self, forKey: .disk_percent)
         download_bps = try? container.decodeIfPresent(Double.self, forKey: .download_bps)
-        upload_bps = try? container.decodeIfPresent(Double.self, forKey: .upload_bps)
-        hostname = try? container.decodeIfPresent(String.self, forKey: .hostname)
-        ip = try? container.decodeIfPresent(String.self, forKey: .ip)
-        tailscale_ip = try? container.decodeIfPresent(String.self, forKey: .tailscale_ip)
 
         if let upDbl = try? container.decodeIfPresent(Double.self, forKey: .uptime_sec) {
             uptime_sec = upDbl
@@ -57,13 +78,11 @@ struct AgentMetricsResponse: Codable {
     }
 }
 
-struct CachedHostConfig {
-    var hostName: String
-    var ip: String
-    var tailscaleIp: String
-    var port: Int
-    var token: String
-    var cachedEntry: SimpleEntry
+struct SimpleEntry: TimelineEntry {
+    let date: Date
+    let hosts: [HostWidgetItem]
+    let onlineCount: Int
+    let totalCount: Int
 }
 
 // MARK: - Helpers
@@ -81,10 +100,8 @@ func formatWidgetSpeed(_ bps: Double) -> String {
         return String(format: "%.0f B/s", bps)
     } else if bps < 1024 * 1024 {
         return String(format: "%.1f KB/s", bps / 1024.0)
-    } else if bps < 1024 * 1024 * 1024 {
-        return String(format: "%.1f MB/s", bps / (1024.0 * 1024.0))
     } else {
-        return String(format: "%.1f GB/s", bps / (1024.0 * 1024.0 * 1024.0))
+        return String(format: "%.1f MB/s", bps / (1024.0 * 1024.0))
     }
 }
 
@@ -94,13 +111,9 @@ func formatWidgetUptime(_ seconds: Double) -> String {
     let days = totalSec / 86400
     let hours = (totalSec % 86400) / 3600
     let minutes = (totalSec % 3600) / 60
-    if days > 0 {
-        return "\(days)d \(hours)h"
-    } else if hours > 0 {
-        return "\(hours)h \(minutes)m"
-    } else {
-        return "\(minutes)m"
-    }
+    if days > 0 { return "\(days)d \(hours)h" }
+    if hours > 0 { return "\(hours)h \(minutes)m" }
+    return "\(minutes)m"
 }
 
 // MARK: - Provider
@@ -108,103 +121,64 @@ struct Provider: TimelineProvider {
     private let suiteNames = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app"]
 
     func placeholder(in context: Context) -> SimpleEntry {
-        loadLocalCache().cachedEntry
+        createPreviewEntry()
     }
 
     func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
-        let cached = loadLocalCache().cachedEntry
-        if cached.cpuPercent > 0 {
-            completion(cached)
+        let cached = loadCachedHosts()
+        if !cached.isEmpty {
+            let online = cached.filter { $0.isOnline }.count
+            completion(SimpleEntry(date: Date(), hosts: cached, onlineCount: online, totalCount: cached.count))
         } else {
-            completion(SimpleEntry(
-                date: Date(),
-                hostName: "PC (SRO130)",
-                ip: "192.168.1.4",
-                status: "Online",
-                isOnline: true,
-                cpu: "45%",
-                cpuPercent: 45.0,
-                ram: "74%",
-                ramPercent: 74.0,
-                disk: "80%",
-                diskPercent: 80.0,
-                downloadSpeed: "↓ 1.2 MB/s",
-                uploadSpeed: "↑ 240 KB/s",
-                netSpeed: "1.2 MB/s",
-                uptime: "17d 1h"
-            ))
+            completion(createPreviewEntry())
         }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
-        let config = loadLocalCache()
-        fetchLiveMetrics(config: config) { entry in
+        var hosts = loadCachedHosts()
+        if hosts.isEmpty {
+            hosts = getDefaultHosts()
+        }
+
+        let token = loadToken()
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var updatedHosts = hosts
+
+        for index in 0..<hosts.count {
+            group.enter()
+            let host = hosts[index]
+            checkHostStatus(host: host, token: token) { updated in
+                lock.lock()
+                updatedHosts[index] = updated
+                lock.unlock()
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) {
+            self.saveCachedHosts(hosts: updatedHosts)
+            let online = updatedHosts.filter { $0.isOnline }.count
+            let entry = SimpleEntry(date: Date(), hosts: updatedHosts, onlineCount: online, totalCount: updatedHosts.count)
             let nextDate = Calendar.current.date(byAdding: .minute, value: 1, to: Date()) ?? Date().addingTimeInterval(60)
             let timeline = Timeline(entries: [entry], policy: .after(nextDate))
             completion(timeline)
         }
     }
 
-    // MARK: - Network Fetching (Gas Manager Architecture)
-    private func fetchLiveMetrics(config: CachedHostConfig, completion: @escaping (SimpleEntry) -> Void) {
-        let targetIp = cleanIpAddress(config.ip)
-        let tsIp = cleanIpAddress(config.tailscaleIp)
-
-        guard !targetIp.isEmpty && targetIp != "--" else {
-            if !tsIp.isEmpty && tsIp != "--" {
-                self.executeMetricRequest(ip: tsIp, port: config.port, token: config.token) { tsResult in
-                    if let tsEntry = tsResult {
-                        self.saveCache(config: config, entry: tsEntry)
-                        completion(tsEntry)
-                    } else {
-                        let offlineEntry = self.makeOfflineEntry(config: config)
-                        self.saveCache(config: config, entry: offlineEntry)
-                        completion(offlineEntry)
-                    }
-                }
-                return
-            }
-            completion(config.cachedEntry)
-            return
-        }
-
-        // 1. Thử gửi HTTP request trực tiếp tới IP LAN
-        executeMetricRequest(ip: targetIp, port: config.port, token: config.token) { result in
-            if let entry = result {
-                self.saveCache(config: config, entry: entry)
-                completion(entry)
-                return
-            }
-
-            // 2. Nếu IP LAN không phản hồi và có IP Tailscale khác IP LAN, thử tiếp Tailscale
-            if !tsIp.isEmpty && tsIp != targetIp && tsIp != "--" {
-                self.executeMetricRequest(ip: tsIp, port: config.port, token: config.token) { tsResult in
-                    if let tsEntry = tsResult {
-                        self.saveCache(config: config, entry: tsEntry)
-                        completion(tsEntry)
-                        return
-                    }
-                    let offlineEntry = self.makeOfflineEntry(config: config)
-                    self.saveCache(config: config, entry: offlineEntry)
-                    completion(offlineEntry)
-                }
-            } else {
-                let offlineEntry = self.makeOfflineEntry(config: config)
-                self.saveCache(config: config, entry: offlineEntry)
-                completion(offlineEntry)
-            }
-        }
-    }
-
-    private func executeMetricRequest(ip: String, port: Int, token: String, completion: @escaping (SimpleEntry?) -> Void) {
-        guard let url = URL(string: "http://\(ip):\(port)/metrics") else {
-            completion(nil)
+    private func checkHostStatus(host: HostWidgetItem, token: String, completion: @escaping (HostWidgetItem) -> Void) {
+        let cleanIp = cleanIpAddress(host.ip)
+        guard !cleanIp.isEmpty, cleanIp != "--", let url = URL(string: "http://\(cleanIp):\(host.port)/metrics") else {
+            var res = host
+            res.isOnline = false
+            res.status = "Mất kết nối"
+            completion(res)
             return
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 3.5
+        request.timeoutInterval = 2.5
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         if !token.isEmpty {
             request.setValue(token, forHTTPHeaderField: "X-LAN-Monitor-Token")
@@ -212,233 +186,112 @@ struct Provider: TimelineProvider {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 3.5
-        config.timeoutIntervalForResource = 3.5
+        config.timeoutIntervalForRequest = 2.5
+        config.timeoutIntervalForResource = 2.5
         let session = URLSession(configuration: config)
 
         let task = session.dataTask(with: request) { data, response, error in
             defer { session.finishTasksAndInvalidate() }
 
+            var res = host
             guard error == nil,
                   let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode),
                   let data = data else {
-                completion(nil)
+                res.isOnline = false
+                res.status = "Mất kết nối"
+                completion(res)
                 return
             }
 
-            do {
-                let metrics = try JSONDecoder().decode(AgentMetricsResponse.self, from: data)
-                let cpuVal = metrics.cpu_percent ?? 0.0
-                let ramVal = metrics.ram_percent ?? 0.0
-                let diskVal = metrics.disk_percent ?? 0.0
-                let downBps = metrics.download_bps ?? 0.0
-                let upBps = metrics.upload_bps ?? 0.0
-                let uptimeSec = metrics.uptime_sec ?? 0.0
-
-                let entry = SimpleEntry(
-                    date: Date(),
-                    hostName: metrics.hostname ?? ip,
-                    ip: ip,
-                    status: "Online",
-                    isOnline: true,
-                    cpu: String(format: "%.0f%%", cpuVal),
-                    cpuPercent: cpuVal,
-                    ram: String(format: "%.0f%%", ramVal),
-                    ramPercent: ramVal,
-                    disk: String(format: "%.0f%%", diskVal),
-                    diskPercent: diskVal,
-                    downloadSpeed: "↓ " + formatWidgetSpeed(downBps),
-                    uploadSpeed: "↑ " + formatWidgetSpeed(upBps),
-                    netSpeed: formatWidgetSpeed(downBps),
-                    uptime: formatWidgetUptime(uptimeSec)
-                )
-                completion(entry)
-            } catch {
-                completion(nil)
+            if let metrics = try? JSONDecoder().decode(AgentMetricsResponse.self, from: data) {
+                res.isOnline = true
+                res.status = "Online"
+                res.cpuPercent = metrics.cpu_percent ?? 0.0
+                res.ramPercent = metrics.ram_percent ?? 0.0
+                res.netSpeed = formatWidgetSpeed(metrics.download_bps ?? 0.0)
+                res.uptime = formatWidgetUptime(metrics.uptime_sec ?? 0.0)
+            } else {
+                res.isOnline = true
+                res.status = "Online"
             }
+            completion(res)
         }
         task.resume()
     }
 
-    private func makeOfflineEntry(config: CachedHostConfig) -> SimpleEntry {
-        SimpleEntry(
-            date: Date(),
-            hostName: config.hostName.isEmpty ? "PC" : config.hostName,
-            ip: config.ip.isEmpty ? "--" : config.ip,
-            status: "Mất kết nối",
-            isOnline: false,
-            cpu: "--",
-            cpuPercent: 0.0,
-            ram: "--",
-            ramPercent: 0.0,
-            disk: "--",
-            diskPercent: 0.0,
-            downloadSpeed: "↓ --",
-            uploadSpeed: "↑ --",
-            netSpeed: "--",
-            uptime: "--"
-        )
+    private func createPreviewEntry() -> SimpleEntry {
+        let sampleHosts = [
+            HostWidgetItem(id: "1", name: "Máy cơ quan", ip: "192.168.1.10", port: 8765, isOnline: true, status: "Online", cpuPercent: 38.0, ramPercent: 65.0, netSpeed: "1.2 MB/s", uptime: "14d 6h"),
+            HostWidgetItem(id: "2", name: "Talescale-Máy cơ quan", ip: "100.100.100.100", port: 8765, isOnline: true, status: "Online", cpuPercent: 42.0, ramPercent: 65.0, netSpeed: "850 KB/s", uptime: "14d 6h"),
+            HostWidgetItem(id: "3", name: "Máy tính cá nhân", ip: "192.168.1.4", port: 8765, isOnline: false, status: "Mất kết nối", cpuPercent: 0.0, ramPercent: 0.0, netSpeed: "--", uptime: "--")
+        ]
+        return SimpleEntry(date: Date(), hosts: sampleHosts, onlineCount: 2, totalCount: 3)
+    }
+
+    private func getDefaultHosts() -> [HostWidgetItem] {
+        return [
+            HostWidgetItem(id: "1", name: "Máy cơ quan", ip: "192.168.1.10", port: 8765),
+            HostWidgetItem(id: "2", name: "Talescale-Máy cơ quan", ip: "100.100.100.100", port: 8765),
+            HostWidgetItem(id: "3", name: "SRO130 (LAN)", ip: "192.168.1.4", port: 8765)
+        ]
     }
 
     // MARK: - Cache & Storage
-    private func loadLocalCache() -> CachedHostConfig {
-        var loadedDict: [String: Any] = [:]
-
-        // 1. Ưu tiên đọc từ App Group UserDefaults
+    private func loadCachedHosts() -> [HostWidgetItem] {
         for suite in suiteNames {
-            if let defs = UserDefaults(suiteName: suite), let h = defs.string(forKey: "widget_host"), !h.isEmpty {
-                for key in ["widget_host", "widget_ip", "widget_tailscale_ip", "widget_token", "widget_status", "widget_down_speed", "widget_up_speed", "widget_net_speed", "widget_uptime"] {
-                    if let val = defs.string(forKey: key) { loadedDict[key] = val }
+            if let defs = UserDefaults(suiteName: suite), let jsonStr = defs.string(forKey: "widget_hosts_json"), let data = jsonStr.data(using: .utf8) {
+                if let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: data), !hosts.isEmpty {
+                    return hosts
                 }
-                for key in ["widget_cpu_val", "widget_ram_val", "widget_disk_val", "widget_last_updated"] {
-                    if defs.object(forKey: key) != nil { loadedDict[key] = defs.double(forKey: key) }
-                }
-                if defs.object(forKey: "widget_port") != nil {
-                    loadedDict["widget_port"] = defs.integer(forKey: "widget_port")
-                }
-                if defs.object(forKey: "widget_is_online") != nil {
-                    loadedDict["widget_is_online"] = defs.bool(forKey: "widget_is_online")
-                }
-                break
             }
-        }
-
-        // 2. Dự phòng: Đọc từ tệp widget_data.json trong App Group shared container
-        if loadedDict.isEmpty {
-            for suite in suiteNames {
-                if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
-                    let fileURL = containerURL.appendingPathComponent("widget_data.json")
-                    if let data = try? Data(contentsOf: fileURL),
-                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        loadedDict = json
-                        break
-                    }
+            if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
+                let fileURL = containerURL.appendingPathComponent("widget_hosts.json")
+                if let data = try? Data(contentsOf: fileURL),
+                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let jsonStr = dict["hosts_json"] as? String,
+                   let jsonData = jsonStr.data(using: .utf8),
+                   let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: jsonData), !hosts.isEmpty {
+                    return hosts
                 }
             }
         }
-
-        // 3. Dự phòng cấp cuối: Đọc từ UserDefaults.standard
-        if loadedDict.isEmpty {
-            let defs = UserDefaults.standard
-            if let h = defs.string(forKey: "widget_host") ?? defs.string(forKey: "flutter.widget_host"), !h.isEmpty {
-                loadedDict["widget_host"] = h
-                loadedDict["widget_ip"] = defs.string(forKey: "widget_ip") ?? defs.string(forKey: "flutter.widget_ip")
-                loadedDict["widget_tailscale_ip"] = defs.string(forKey: "widget_tailscale_ip") ?? defs.string(forKey: "flutter.widget_tailscale_ip")
-                loadedDict["widget_token"] = defs.string(forKey: "widget_token") ?? defs.string(forKey: "flutter.widget_token")
-                loadedDict["widget_port"] = defs.integer(forKey: "widget_port") != 0 ? defs.integer(forKey: "widget_port") : defs.integer(forKey: "flutter.widget_port")
-                loadedDict["widget_status"] = defs.string(forKey: "widget_status") ?? defs.string(forKey: "flutter.widget_status")
-                loadedDict["widget_is_online"] = (defs.object(forKey: "widget_is_online") as? NSNumber)?.boolValue ?? (defs.object(forKey: "flutter.widget_is_online") as? NSNumber)?.boolValue
-                loadedDict["widget_cpu_val"] = defs.double(forKey: "widget_cpu_val") > 0 ? defs.double(forKey: "widget_cpu_val") : defs.double(forKey: "flutter.widget_cpu_val")
-                loadedDict["widget_ram_val"] = defs.double(forKey: "widget_ram_val") > 0 ? defs.double(forKey: "widget_ram_val") : defs.double(forKey: "flutter.widget_ram_val")
-                loadedDict["widget_disk_val"] = defs.double(forKey: "widget_disk_val") > 0 ? defs.double(forKey: "widget_disk_val") : defs.double(forKey: "flutter.widget_disk_val")
-                loadedDict["widget_down_speed"] = defs.string(forKey: "widget_down_speed") ?? defs.string(forKey: "flutter.widget_down_speed")
-                loadedDict["widget_up_speed"] = defs.string(forKey: "widget_up_speed") ?? defs.string(forKey: "flutter.widget_up_speed")
-                loadedDict["widget_net_speed"] = defs.string(forKey: "widget_net_speed") ?? defs.string(forKey: "flutter.widget_net_speed")
-                loadedDict["widget_uptime"] = defs.string(forKey: "widget_uptime") ?? defs.string(forKey: "flutter.widget_uptime")
-                loadedDict["widget_last_updated"] = (defs.object(forKey: "widget_last_updated") as? NSNumber)?.doubleValue ?? (defs.object(forKey: "flutter.widget_last_updated") as? NSNumber)?.doubleValue
-            }
-        }
-
-        var host = loadedDict["widget_host"] as? String ?? ""
-        var ip = loadedDict["widget_ip"] as? String ?? ""
-        var tailscaleIp = loadedDict["widget_tailscale_ip"] as? String ?? ""
-        let portVal = loadedDict["widget_port"] as? Int ?? ((loadedDict["widget_port"] as? NSNumber)?.intValue ?? 8765)
-        var token = loadedDict["widget_token"] as? String ?? ""
-
-        // Khôi phục thông tin máy tính của người dùng làm mặc định an toàn
-        if host.isEmpty || host == "Chưa kết nối" || host == "Chưa có máy" { host = "SRO130" }
-        if ip.isEmpty || ip == "--" || ip == "127.0.0.1" || ip.contains("Mở app") { ip = "192.168.1.4" }
-        if tailscaleIp.isEmpty || tailscaleIp == "--" { tailscaleIp = "100.66.18.111" }
-        if token.isEmpty { token = "LANMONITOR-CHANGE-ME" }
-
-        let isOnlinePref: Bool
-        if let val = loadedDict["widget_is_online"] as? Bool {
-            isOnlinePref = val
-        } else if let num = loadedDict["widget_is_online"] as? NSNumber {
-            isOnlinePref = num.boolValue
-        } else {
-            isOnlinePref = false
-        }
-
-        let lastUpdatedMs: Double
-        if let val = loadedDict["widget_last_updated"] as? Double {
-            lastUpdatedMs = val
-        } else if let num = loadedDict["widget_last_updated"] as? NSNumber {
-            lastUpdatedMs = num.doubleValue
-        } else {
-            lastUpdatedMs = 0
-        }
-
-        let nowMs = Date().timeIntervalSince1970 * 1000.0
-        let isStale = (lastUpdatedMs > 0) && ((nowMs - lastUpdatedMs) > 300000)
-        let effectiveOnline = isOnlinePref && !isStale
-
-        let statusText = effectiveOnline ? "Online" : (isStale ? "Mất kết nối (Quá hạn)" : (loadedDict["widget_status"] as? String ?? "Mất kết nối"))
-
-        let cpuVal: Double = effectiveOnline ? ((loadedDict["widget_cpu_val"] as? Double) ?? ((loadedDict["widget_cpu_val"] as? NSNumber)?.doubleValue ?? 0.0)) : 0.0
-        let ramVal: Double = effectiveOnline ? ((loadedDict["widget_ram_val"] as? Double) ?? ((loadedDict["widget_ram_val"] as? NSNumber)?.doubleValue ?? 0.0)) : 0.0
-        let diskVal: Double = effectiveOnline ? ((loadedDict["widget_disk_val"] as? Double) ?? ((loadedDict["widget_disk_val"] as? NSNumber)?.doubleValue ?? 0.0)) : 0.0
-        let downSpeed: String = effectiveOnline ? (loadedDict["widget_down_speed"] as? String ?? "↓ 0 B/s") : "↓ --"
-        let upSpeed: String = effectiveOnline ? (loadedDict["widget_up_speed"] as? String ?? "↑ 0 B/s") : "↑ --"
-        let netSpeed: String = effectiveOnline ? (loadedDict["widget_net_speed"] as? String ?? "0 B/s") : "--"
-        let uptime: String = effectiveOnline ? (loadedDict["widget_uptime"] as? String ?? "--") : "--"
-
-        let entry = SimpleEntry(
-            date: Date(),
-            hostName: host,
-            ip: ip,
-            status: statusText,
-            isOnline: effectiveOnline,
-            cpu: effectiveOnline ? String(format: "%.0f%%", cpuVal) : "--",
-            cpuPercent: cpuVal,
-            ram: effectiveOnline ? String(format: "%.0f%%", ramVal) : "--",
-            ramPercent: ramVal,
-            disk: effectiveOnline ? String(format: "%.0f%%", diskVal) : "--",
-            diskPercent: diskVal,
-            downloadSpeed: downSpeed,
-            uploadSpeed: upSpeed,
-            netSpeed: netSpeed,
-            uptime: uptime
-        )
-
-        return CachedHostConfig(hostName: host, ip: ip, tailscaleIp: tailscaleIp, port: portVal, token: token, cachedEntry: entry)
+        return []
     }
 
-    private func saveCache(config: CachedHostConfig, entry: SimpleEntry) {
-        let timestamp = Date().timeIntervalSince1970 * 1000.0
+    private func saveCachedHosts(hosts: [HostWidgetItem]) {
+        guard let data = try? JSONEncoder().encode(hosts), let jsonStr = String(data: data, encoding: .utf8) else { return }
+        let online = hosts.filter { $0.isOnline }.count
         let dict: [String: Any] = [
-            "widget_host": entry.hostName,
-            "widget_ip": entry.ip,
-            "widget_tailscale_ip": config.tailscaleIp,
-            "widget_port": config.port,
-            "widget_token": config.token,
-            "widget_is_online": entry.isOnline,
-            "widget_status": entry.status,
-            "widget_cpu_val": entry.cpuPercent,
-            "widget_ram_val": entry.ramPercent,
-            "widget_disk_val": entry.diskPercent,
-            "widget_down_speed": entry.downloadSpeed,
-            "widget_up_speed": entry.uploadSpeed,
-            "widget_net_speed": entry.netSpeed,
-            "widget_uptime": entry.uptime,
-            "widget_last_updated": timestamp
+            "hosts_json": jsonStr,
+            "hosts_count": hosts.count,
+            "online_count": online,
+            "last_updated": Date().timeIntervalSince1970 * 1000.0
         ]
 
         for suite in suiteNames {
             if let defs = UserDefaults(suiteName: suite) {
-                for (k, v) in dict {
-                    defs.set(v, forKey: k)
-                }
+                defs.set(jsonStr, forKey: "widget_hosts_json")
+                defs.set(hosts.count, forKey: "widget_hosts_count")
+                defs.set(online, forKey: "widget_online_count")
                 defs.synchronize()
             }
             if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
-                let fileURL = containerURL.appendingPathComponent("widget_data.json")
+                let fileURL = containerURL.appendingPathComponent("widget_hosts.json")
                 if let data = try? JSONSerialization.data(withJSONObject: dict, options: []) {
                     try? data.write(to: fileURL)
                 }
             }
         }
+    }
+
+    private func loadToken() -> String {
+        for suite in suiteNames {
+            if let defs = UserDefaults(suiteName: suite), let t = defs.string(forKey: "widget_token"), !t.isEmpty {
+                return t
+            }
+        }
+        return "LANMONITOR-CHANGE-ME"
     }
 }
 
@@ -451,9 +304,7 @@ struct WidgetTheme {
     let dividerColor: Color
     let iconTintColor: Color
     let cpuColor: Color
-    let ramColor: Color
     let diskColor: Color
-    let speedColor: Color
     let onlineColor: Color
     let offlineColor: Color
 
@@ -463,31 +314,27 @@ struct WidgetTheme {
 
         if scheme == .dark {
             return WidgetTheme(
-                background: Color(red: 15/255, green: 23/255, blue: 42/255), // #0F172A (Slate 900)
-                cardBackground: Color(red: 30/255, green: 41/255, blue: 59/255), // #1E293B (Slate 800)
-                titleColor: Color(red: 248/255, green: 250/255, blue: 252/255), // #F8FAFC
-                subtitleColor: Color(red: 148/255, green: 163/255, blue: 184/255), // #94A3B8 (Slate 400)
-                dividerColor: Color.white.opacity(0.12),
+                background: Color(red: 15/255, green: 23/255, blue: 42/255), // Slate 900
+                cardBackground: Color(red: 30/255, green: 41/255, blue: 59/255), // Slate 800
+                titleColor: Color(red: 248/255, green: 250/255, blue: 252/255),
+                subtitleColor: Color(red: 148/255, green: 163/255, blue: 184/255), // Slate 400
+                dividerColor: Color.white.opacity(0.1),
                 iconTintColor: Color(red: 56/255, green: 189/255, blue: 248/255), // Sky 400
-                cpuColor: Color(red: 56/255, green: 189/255, blue: 248/255), // Sky 400
-                ramColor: Color(red: 251/255, green: 191/255, blue: 36/255), // Amber 400
-                diskColor: Color(red: 52/255, green: 211/255, blue: 153/255), // Emerald 400
-                speedColor: Color(red: 56/255, green: 189/255, blue: 248/255),
+                cpuColor: Color(red: 56/255, green: 189/255, blue: 248/255),
+                diskColor: Color(red: 52/255, green: 211/255, blue: 153/255),
                 onlineColor: online,
                 offlineColor: offline
             )
         } else {
             return WidgetTheme(
-                background: Color(red: 248/255, green: 250/255, blue: 252/255), // #F8FAFC (Slate 50)
+                background: Color(red: 248/255, green: 250/255, blue: 252/255), // Slate 50
                 cardBackground: Color.white,
-                titleColor: Color(red: 15/255, green: 23/255, blue: 42/255), // #0F172A (Slate 900)
-                subtitleColor: Color(red: 100/255, green: 116/255, blue: 139/255), // #64748B (Slate 500)
+                titleColor: Color(red: 15/255, green: 23/255, blue: 42/255),
+                subtitleColor: Color(red: 100/255, green: 116/255, blue: 139/255), // Slate 500
                 dividerColor: Color.black.opacity(0.08),
                 iconTintColor: Color(red: 2/255, green: 132/255, blue: 199/255), // Sky 600
-                cpuColor: Color(red: 2/255, green: 132/255, blue: 199/255), // Sky 600
-                ramColor: Color(red: 217/255, green: 119/255, blue: 6/255), // Amber 600
-                diskColor: Color(red: 5/255, green: 150/255, blue: 105/255), // Emerald 600
-                speedColor: Color(red: 2/255, green: 132/255, blue: 199/255),
+                cpuColor: Color(red: 2/255, green: 132/255, blue: 199/255),
+                diskColor: Color(red: 5/255, green: 150/255, blue: 105/255),
                 onlineColor: online,
                 offlineColor: offline
             )
@@ -495,86 +342,86 @@ struct WidgetTheme {
     }
 }
 
-// MARK: - Views (Custom Progress Bar for 100% Reliable Rendering Across All iOS Versions)
-struct MetricBar: View {
-    let title: String
-    let value: String
-    let percent: Double
-    let tintColor: Color
-    let labelColor: Color
-    var isOnline: Bool = true
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(labelColor)
-                Spacer()
-                Text(value)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(isOnline ? tintColor : labelColor)
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2.5)
-                        .fill(labelColor.opacity(0.18))
-                        .frame(height: 5)
-                    if isOnline && percent > 0 {
-                        RoundedRectangle(cornerRadius: 2.5)
-                            .fill(tintColor)
-                            .frame(width: max(0, min(geo.size.width * CGFloat(min(percent / 100.0, 1.0)), geo.size.width)), height: 5)
-                    }
-                }
-            }
-            .frame(height: 5)
-        }
-    }
-}
-
+// MARK: - Views: Host Overview Widget (Tapping opens host directly in App)
 struct SmallWidgetView: View {
     var entry: SimpleEntry
     var theme: WidgetTheme
 
-    var statusColor: Color {
-        entry.isOnline ? theme.onlineColor : theme.offlineColor
+    var topHost: HostWidgetItem? {
+        entry.hosts.first
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 7, height: 7)
-                Text(entry.hostName)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(theme.titleColor)
-                    .lineLimit(1)
-                Spacer()
+        VStack(alignment: .leading, spacing: 5) {
+            // Header
+            HStack(spacing: 4) {
                 Image(systemName: "desktopcomputer")
                     .font(.system(size: 11))
-                    .foregroundColor(entry.isOnline ? theme.iconTintColor : theme.offlineColor)
+                    .foregroundColor(theme.iconTintColor)
+                Text("LAN Monitor")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(theme.titleColor)
+                Spacer()
+                HStack(spacing: 3) {
+                    Circle()
+                        .fill(entry.onlineCount > 0 ? theme.onlineColor : theme.offlineColor)
+                        .frame(width: 5, height: 5)
+                    Text("\(entry.onlineCount)/\(entry.totalCount)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(entry.onlineCount > 0 ? theme.onlineColor : theme.offlineColor)
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(theme.cardBackground)
+                .cornerRadius(6)
             }
 
             Divider().background(theme.dividerColor)
 
-            MetricBar(title: "CPU", value: entry.cpu, percent: entry.cpuPercent, tintColor: theme.cpuColor, labelColor: theme.subtitleColor, isOnline: entry.isOnline)
-            MetricBar(title: "RAM", value: entry.ram, percent: entry.ramPercent, tintColor: theme.ramColor, labelColor: theme.subtitleColor, isOnline: entry.isOnline)
-            MetricBar(title: "Ổ ĐĨA", value: entry.disk, percent: entry.diskPercent, tintColor: theme.diskColor, labelColor: theme.subtitleColor, isOnline: entry.isOnline)
+            // Hosts List (up to 3 items)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(entry.hosts.prefix(3)) { host in
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(host.isOnline ? theme.onlineColor : theme.offlineColor)
+                            .frame(width: 6, height: 6)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(host.name)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(theme.titleColor)
+                                .lineLimit(1)
+                            Text(host.ip)
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundColor(theme.subtitleColor)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        if host.isOnline {
+                            Text("\(Int(host.cpuPercent))%")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(theme.cpuColor)
+                        } else {
+                            Text("Offline")
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundColor(theme.offlineColor)
+                        }
+                    }
+                }
+            }
 
             Spacer(minLength: 0)
 
             HStack {
-                Text(entry.status)
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundColor(statusColor)
-                    .lineLimit(1)
+                Text("Chạm để mở thông số")
+                    .font(.system(size: 8))
+                    .foregroundColor(theme.subtitleColor.opacity(0.8))
                 Spacer()
-                Text(entry.netSpeed)
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(entry.isOnline ? theme.speedColor : theme.subtitleColor)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 7))
+                    .foregroundColor(theme.subtitleColor)
             }
         }
+        .widgetURL(URL(string: "lanmonitor://host?id=\(topHost?.id ?? "")&ip=\(topHost?.ip ?? "")"))
     }
 }
 
@@ -582,62 +429,100 @@ struct MediumWidgetView: View {
     var entry: SimpleEntry
     var theme: WidgetTheme
 
-    var statusColor: Color {
-        entry.isOnline ? theme.onlineColor : theme.offlineColor
-    }
-
     var body: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
-                    Text(entry.hostName)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(theme.titleColor)
-                        .lineLimit(1)
-                }
-
-                HStack(spacing: 4) {
-                    Text(entry.ip)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundColor(theme.subtitleColor)
-                    Text("•")
-                        .font(.system(size: 10))
-                        .foregroundColor(theme.subtitleColor)
-                    Text(entry.status)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(statusColor)
-                        .lineLimit(1)
-                }
-
+        VStack(alignment: .leading, spacing: 6) {
+            // Header
+            HStack(spacing: 6) {
+                Image(systemName: "desktopcomputer")
+                    .font(.system(size: 13))
+                    .foregroundColor(theme.iconTintColor)
+                Text("LAN Monitor")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(theme.titleColor)
                 Spacer()
-
-                HStack(spacing: 10) {
-                    Text(entry.downloadSpeed)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(entry.isOnline ? theme.diskColor : theme.subtitleColor)
-                    Text(entry.uploadSpeed)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(entry.isOnline ? theme.speedColor : theme.subtitleColor)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(entry.onlineCount > 0 ? theme.onlineColor : theme.offlineColor)
+                        .frame(width: 6, height: 6)
+                    Text("\(entry.onlineCount)/\(entry.totalCount) Máy Đang Chạy")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(entry.onlineCount > 0 ? theme.onlineColor : theme.offlineColor)
                 }
-
-                Text(entry.isOnline ? "Uptime: \(entry.uptime)" : "Trạng thái: Ngoại tuyến")
-                    .font(.system(size: 9))
-                    .foregroundColor(theme.subtitleColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(theme.cardBackground)
+                .cornerRadius(8)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
             Divider().background(theme.dividerColor)
 
-            VStack(spacing: 6) {
-                MetricBar(title: "CPU", value: entry.cpu, percent: entry.cpuPercent, tintColor: theme.cpuColor, labelColor: theme.subtitleColor, isOnline: entry.isOnline)
-                MetricBar(title: "RAM", value: entry.ram, percent: entry.ramPercent, tintColor: theme.ramColor, labelColor: theme.subtitleColor, isOnline: entry.isOnline)
-                MetricBar(title: "Ổ ĐĨA", value: entry.disk, percent: entry.diskPercent, tintColor: theme.diskColor, labelColor: theme.subtitleColor, isOnline: entry.isOnline)
+            // Hosts Grid / Cards (up to 4 hosts with individual deep links)
+            VStack(spacing: 5) {
+                ForEach(entry.hosts.prefix(3)) { host in
+                    Link(destination: URL(string: "lanmonitor://host?id=\(host.id)&ip=\(host.ip)")!) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(host.isOnline ? theme.onlineColor : theme.offlineColor)
+                                .frame(width: 7, height: 7)
+
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(host.name)
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(theme.titleColor)
+                                    .lineLimit(1)
+                                Text(host.ip)
+                                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                    .foregroundColor(theme.subtitleColor)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer()
+
+                            if host.isOnline {
+                                HStack(spacing: 6) {
+                                    Text("CPU \(Int(host.cpuPercent))%")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(theme.cpuColor)
+                                    Text(host.netSpeed != "--" && !host.netSpeed.isEmpty ? host.netSpeed : "Online")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(theme.diskColor)
+                                }
+                            } else {
+                                Text("Mất kết nối")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(theme.offlineColor)
+                            }
+
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8))
+                                .foregroundColor(theme.subtitleColor.opacity(0.6))
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 8)
+                        .background(theme.cardBackground.opacity(0.6))
+                        .cornerRadius(8)
+                    }
+                }
             }
-            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Text("Chạm vào máy để xem chi tiết thông số trong app")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundColor(theme.subtitleColor)
+                Spacer()
+                Text("Cập nhật: " + formatTime(entry.date))
+                    .font(.system(size: 8))
+                    .foregroundColor(theme.subtitleColor.opacity(0.8))
+            }
         }
+    }
+
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 }
 
@@ -661,7 +546,7 @@ struct LANMonitorWidgetEntryView: View {
     }
 }
 
-// iOS 17/18 containerBackground compatibility extension (matched with GasWidget)
+// iOS 17/18 containerBackground compatibility extension
 extension View {
     @ViewBuilder
     func widgetBackground(_ backgroundView: some View) -> some View {
@@ -683,8 +568,8 @@ struct LANMonitorWidget: Widget {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             LANMonitorWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("LAN Monitor")
-        .description("Giám sát CPU, RAM, Ổ đĩa PC theo thời gian thực.")
+        .configurationDisplayName("Trạng thái Máy tính")
+        .description("Giám sát các máy tính đang hoạt động và chạm để xem trực tiếp thông số.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

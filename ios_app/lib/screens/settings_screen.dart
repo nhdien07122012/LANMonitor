@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/monitor_provider.dart';
+import 'config_sync_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -71,6 +72,30 @@ class SettingsScreen extends StatelessWidget {
               subtitle: Text(provider.globalToken, style: TextStyle(fontSize: 12, color: secondaryText)),
               trailing: const Icon(CupertinoIcons.pencil, size: 18),
               onTap: () => _showEditTokenDialog(context, provider),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section 1.5: Đồng bộ Cấu hình dashboard_config.json
+          Text('ĐỒNG BỘ CẤU HÌNH (DASHBOARD_CONFIG.JSON)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: secondaryText)),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cardBorder),
+            ),
+            child: ListTile(
+              leading: const Icon(CupertinoIcons.arrow_2_circlepath_circle, color: Color(0xFF10B981)),
+              title: Text('Đồng bộ file dashboard_config.json', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: primaryText)),
+              subtitle: Text('Đồng bộ Online qua URL, dán JSON hoặc khôi phục từ Windows.', style: TextStyle(fontSize: 12, color: secondaryText)),
+              trailing: const Icon(CupertinoIcons.chevron_right, size: 18),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  CupertinoPageRoute(builder: (_) => const ConfigSyncScreen()),
+                );
+              },
             ),
           ),
           const SizedBox(height: 20),

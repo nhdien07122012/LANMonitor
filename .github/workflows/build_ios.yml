@@ -86,6 +86,13 @@ jobs:
               # Allow querying Microsoft Remote Desktop app
               pl['LSApplicationQueriesSchemes'] = ['rdp']
               
+              # Deep linking URL scheme for Widget interaction
+              pl['CFBundleURLTypes'] = [{
+                  'CFBundleTypeRole': 'Editor',
+                  'CFBundleURLName': 'com.lanmonitor.lanMonitor',
+                  'CFBundleURLSchemes': ['lanmonitor']
+              }]
+              
               with open(plist_path, 'wb') as f:
                   plistlib.dump(pl, f)
               print('Successfully injected network permissions into Info.plist')
@@ -214,8 +221,8 @@ jobs:
           with open(ext_plist, 'rb') as f:
               ext_pl = plistlib.load(f)
 
-          version = app_pl.get('CFBundleShortVersionString', '1.1.6')
-          build = app_pl.get('CFBundleVersion', '16')
+          version = app_pl.get('CFBundleShortVersionString', '1.2.0')
+          build = app_pl.get('CFBundleVersion', '17')
           app_id = app_pl.get('CFBundleIdentifier', 'com.lanmonitor.lanMonitor')
           min_os = app_pl.get('MinimumOSVersion', '15.0')
 
@@ -272,9 +279,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.1.6
-          name: "LAN Monitor iOS v1.1.6"
-          body: "Bản v1.1.6: Khắc phục triệt để lỗi crash khi khởi động ứng dụng trên iPhone (sửa force-unwrap trong AppDelegate). Khôi phục cấu hình máy tính mặc định (LAN & Tailscale) và loại bỏ cơ chế xóa nhầm thiết bị. Tối ưu WidgetKit với thanh tiến trình vẽ bằng GeometryReader độc lập hiển thị chuẩn xác trên mọi phiên bản iOS, tự động fallback giữa IP LAN và Tailscale."
+          tag_name: v1.2.0
+          name: "LAN Monitor iOS v1.2.0"
+          body: "Bản v1.2.0: Nâng cấp toàn diện Widget và Hệ thống Cấu hình. (1) Thay thế widget chỉ số bằng Widget Giám sát Danh sách các máy đang hoạt động (Hosts Status Overview), hỗ trợ chạm vào từng máy để mở trực tiếp màn hình chi tiết thông số trong app qua deep link. (2) Bổ sung màn hình Đồng bộ Cấu hình dashboard_config.json như trên Windows, hỗ trợ nạp online qua URL, dán JSON trực tiếp, khôi phục từ file gốc và xuất cấu hình."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false

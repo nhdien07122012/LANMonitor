@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/host_model.dart';
 import '../models/metrics_model.dart';
@@ -14,6 +15,11 @@ class MonitorProvider extends ChangeNotifier {
   int _refreshInterval = 2; // seconds
   bool _isAutoRefresh = true;
   Timer? _timer;
+
+  // Cấu hình đồng bộ online từ URL
+  String? _configSyncUrl;
+  bool _autoSyncOnlineConfig = false;
+  void Function(HostModel)? onOpenHostRequested;
 
   // Apps and Links definitions
   Map<String, String> _customApps = {
@@ -33,12 +39,52 @@ class MonitorProvider extends ChangeNotifier {
   bool get isAutoRefresh => _isAutoRefresh;
   Map<String, String> get customApps => _customApps;
   Map<String, String> get customLinks => _customLinks;
+  String? get configSyncUrl => _configSyncUrl;
+  bool get autoSyncOnlineConfig => _autoSyncOnlineConfig;
 
   int get onlineCount => _hosts.where((h) => h.isOnline == true).length;
   int get offlineCount => _hosts.where((h) => h.isOnline == false).length;
 
   MonitorProvider() {
     _loadFromPrefs();
+    _setupDeepLinkHandler();
+  }
+
+  void _setupDeepLinkHandler() {
+    _widgetChannel.setMethodCallHandler((call) async {
+      if (call.method == 'openHostUrl' && call.arguments is String) {
+        handleOpenHostUrl(call.arguments as String);
+      }
+    });
+
+    // Kiểm tra URL pending khi app khởi động từ Widget tap
+    Future.delayed(const Duration(milliseconds: 500), () async {
+      try {
+        final pending = await _widgetChannel.invokeMethod<String>('getPendingOpenUrl');
+        if (pending != null && pending.isNotEmpty) {
+          handleOpenHostUrl(pending);
+        }
+      } catch (_) {}
+    });
+  }
+
+  void handleOpenHostUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      final hostId = uri.queryParameters['id'];
+      final ip = uri.queryParameters['ip'];
+
+      HostModel? target;
+      if (hostId != null) {
+        target = _hosts.cast<HostModel?>().firstWhere((h) => h?.id == hostId, orElse: () => null);
+      }
+      if (target == null && ip != null) {
+        target = _hosts.cast<HostModel?>().firstWhere((h) => h?.ip == ip || h?.cleanIp == ip, orElse: () => null);
+      }
+      if (target != null && onOpenHostRequested != null) {
+        onOpenHostRequested!(target);
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadFromPrefs() async {
@@ -46,6 +92,8 @@ class MonitorProvider extends ChangeNotifier {
     _globalToken = prefs.getString('global_token') ?? 'LANMONITOR-CHANGE-ME';
     _refreshInterval = prefs.getInt('refresh_interval') ?? 2;
     _isAutoRefresh = prefs.getBool('is_auto_refresh') ?? true;
+    _configSyncUrl = prefs.getString('config_sync_url');
+    _autoSyncOnlineConfig = prefs.getBool('auto_sync_online_config') ?? false;
 
     final hostsJson = prefs.getString('hosts_list');
     if (hostsJson != null && hostsJson.isNotEmpty) {
@@ -89,9 +137,14 @@ class MonitorProvider extends ChangeNotifier {
     }
 
     notifyListeners();
-    _syncPrimaryHostToWidget();
+    _syncHostsToWidget();
     _startTimer();
     refreshAll();
+
+    // Tự động đồng bộ online từ URL nếu được kích hoạt
+    if (_autoSyncOnlineConfig && _configSyncUrl != null && _configSyncUrl!.isNotEmpty) {
+      unawaited(syncConfigFromUrl(_configSyncUrl!, silent: true));
+    }
   }
 
   Future<void> _saveHostsToPrefs() async {
@@ -150,10 +203,38 @@ class MonitorProvider extends ChangeNotifier {
 
     await Future.wait(futures);
 
-    // Đồng bộ trạng thái mới nhất cho iOS Home Screen Widget
-    _syncPrimaryHostToWidget();
+    // Đồng bộ trạng thái danh sách máy mới nhất cho iOS Home Screen Widget
+    _syncHostsToWidget();
 
     notifyListeners();
+  }
+
+  Future<void> _syncHostsToWidget() async {
+    final hostsList = _hosts.map((h) => {
+      'id': h.id,
+      'name': h.name,
+      'ip': h.cleanIp,
+      'port': h.port,
+      'is_online': h.isOnline == true,
+      'status': h.isOnline == true ? 'Online' : (h.isOnline == false ? 'Mất kết nối' : 'Đang kết nối'),
+      'cpu': h.metrics?.cpuPercent ?? 0.0,
+      'ram': h.metrics?.ramPercent ?? 0.0,
+      'net_speed': h.metrics?.formattedDownloadRate ?? '--',
+      'uptime': h.metrics?.formattedUptime ?? '--',
+    }).toList();
+
+    final data = <String, dynamic>{
+      'hosts_count': _hosts.length,
+      'online_count': onlineCount,
+      'hosts_json': json.encode(hostsList),
+      'last_updated': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    try {
+      await _widgetChannel.invokeMethod('updateWidgetHosts', data);
+    } catch (_) {}
+
+    _syncPrimaryHostToWidget();
   }
 
   void _syncPrimaryHostToWidget() {
@@ -316,6 +397,139 @@ class MonitorProvider extends ChangeNotifier {
     } catch (e) {
       return 'Lỗi: ${e.toString().replaceAll('Exception: ', '')}';
     }
+  }
+
+  // MARK: - Đồng bộ Cấu hình (dashboard_config.json)
+  Future<void> setConfigSyncUrl(String url) async {
+    _configSyncUrl = url.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('config_sync_url', _configSyncUrl!);
+    notifyListeners();
+  }
+
+  Future<void> setAutoSyncOnlineConfig(bool val) async {
+    _autoSyncOnlineConfig = val;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_sync_online_config', val);
+    notifyListeners();
+  }
+
+  Future<Map<String, int>> importConfigJson(Map<String, dynamic> config) async {
+    final prefs = await SharedPreferences.getInstance();
+    int addedHosts = 0;
+    int addedApps = 0;
+    int addedLinks = 0;
+
+    // 1. Mã Secret Token
+    if (config['token'] != null && config['token'].toString().isNotEmpty) {
+      _globalToken = config['token'].toString().trim();
+      await prefs.setString('global_token', _globalToken);
+    }
+
+    // 2. Danh sách máy tính (hosts)
+    if (config['hosts'] is List) {
+      final List rawList = config['hosts'];
+      final List<HostModel> parsed = [];
+      for (int i = 0; i < rawList.length; i++) {
+        final item = rawList[i];
+        if (item is Map) {
+          final name = item['name']?.toString() ?? 'PC ${i + 1}';
+          final ip = item['ip']?.toString() ?? '127.0.0.1';
+          final port = (item['port'] as num?)?.toInt() ?? 8765;
+          final token = item['token']?.toString();
+          parsed.add(HostModel(
+            id: item['id']?.toString() ?? '${DateTime.now().millisecondsSinceEpoch}_$i',
+            name: name,
+            ip: ip,
+            port: port,
+            token: token,
+          ));
+        }
+      }
+      if (parsed.isNotEmpty) {
+        _hosts = parsed;
+        await _saveHostsToPrefs();
+        addedHosts = parsed.length;
+      }
+    }
+
+    // 3. Danh sách apps điều khiển nhanh
+    if (config['apps'] is Map) {
+      _customApps = Map<String, String>.from(
+        (config['apps'] as Map).map((k, v) => MapEntry(k.toString(), v.toString())),
+      );
+      await prefs.setString('custom_apps', json.encode(_customApps));
+      addedApps = _customApps.length;
+    }
+
+    // 4. Danh sách web links mở nhanh
+    if (config['links'] is Map) {
+      _customLinks = Map<String, String>.from(
+        (config['links'] as Map).map((k, v) => MapEntry(k.toString(), v.toString())),
+      );
+      await prefs.setString('custom_links', json.encode(_customLinks));
+      addedLinks = _customLinks.length;
+    }
+
+    notifyListeners();
+    _syncHostsToWidget();
+    refreshAll();
+
+    return {
+      'hosts': addedHosts,
+      'apps': addedApps,
+      'links': addedLinks,
+    };
+  }
+
+  Future<Map<String, int>> syncConfigFromUrl(String url, {bool silent = false}) async {
+    final cleanUrl = url.trim();
+    if (cleanUrl.isEmpty) {
+      throw Exception('Địa chỉ URL cấu hình không được để trống.');
+    }
+
+    final res = await http.get(Uri.parse(cleanUrl)).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('Không thể tải file từ URL (Mã HTTP ${res.statusCode})');
+    }
+
+    final data = json.decode(utf8.decode(res.bodyBytes));
+    if (data is! Map<String, dynamic>) {
+      throw Exception('Nội dung file không đúng cấu trúc JSON hợp lệ.');
+    }
+
+    await setConfigSyncUrl(cleanUrl);
+    return await importConfigJson(data);
+  }
+
+  Future<Map<String, int>> loadBundledConfig() async {
+    try {
+      final str = await rootBundle.loadString('assets/dashboard_config.json');
+      final data = json.decode(str) as Map<String, dynamic>;
+      return await importConfigJson(data);
+    } catch (e) {
+      throw Exception('Lỗi đọc file cấu hình gốc: $e');
+    }
+  }
+
+  String exportConfigJson() {
+    final map = <String, dynamic>{
+      'token': _globalToken,
+      'theme': 'dark',
+      'hosts': _hosts.map((h) => {
+        'name': h.name,
+        'ip': h.cleanIp,
+        if (h.port != 8765) 'port': h.port,
+        if (h.token != null && h.token!.isNotEmpty) 'token': h.token,
+      }).toList(),
+      'apps': _customApps,
+      'links': _customLinks,
+      'notify_offline': true,
+      'hide_offline': false,
+      'minimal_style': 'digital_pill',
+      'minimal_layout': 'vertical',
+    };
+    return const JsonEncoder.withIndent('  ').convert(map);
   }
 
   @override
