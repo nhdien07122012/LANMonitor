@@ -6,10 +6,10 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ## [v1.1.3] - 2026-11-16 (Build 13)
 - **Mục tiêu thay đổi**: Khắc phục triệt để lỗi Widget giữ dữ liệu cũ và đứng im khi ứng dụng mất kết nối máy chủ. Bổ sung cơ chế xử lý ngắt kết nối đa tầng: hiển thị trạng thái "Mất kết nối" kèm chấm đỏ cảnh báo, tự động reset các thanh chỉ số phần cứng về "--", hỗ trợ đồng bộ thời gian thực qua native App Group (`WidgetCenter.shared.reloadAllTimelines`) và cơ chế phát hiện timeout tự động độc lập (`secondsAgo > 300`).
-- **Commit SHA**: *Sẽ cập nhật ngay sau khi commit*
+- **Commit SHA**: `db679b5`
 - **Lệnh hoàn tác mẫu (Rollback)**:
   ```bash
-  git revert HEAD --no-edit
+  git revert db679b5 --no-edit
   ```
 - **Chi tiết kỹ thuật các file đã chỉnh sửa**:
   - `ios_app/lib/providers/monitor_provider.dart`:
