@@ -6,10 +6,10 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ## [v1.1.4] - 2026-11-16 (Build 14)
 - **Mục tiêu thay đổi**: Khắc phục triệt để lỗi Widget báo online nhưng các thanh tiến trình không chạy (hiển thị 0%). Sửa lỗi đăng ký MethodChannel native trong `AppDelegate.swift`, bổ sung cơ chế đồng bộ kép đa tầng (App Group UserDefaults + file `widget_data.json` trong Shared Container), loại bỏ trạng thái Online giả lập khi chưa có dữ liệu đồng bộ từ ứng dụng.
-- **Commit SHA**: `95d5ff3`
+- **Commit SHA**: `fbcef95`
 - **Lệnh hoàn tác mẫu (Rollback)**:
   ```bash
-  git revert 95d5ff3 --no-edit
+  git revert fbcef95 --no-edit
   ```
 - **Chi tiết kỹ thuật các file đã chỉnh sửa**:
   - `ios_app/patch_app_delegate.py`:
