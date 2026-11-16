@@ -151,7 +151,7 @@ class MonitorProvider extends ChangeNotifier {
   void _syncPrimaryHostToWidget() {
     if (_hosts.isNotEmpty) {
       final primary = _hosts.first;
-      if (primary.isOnline && primary.metrics != null) {
+      if (primary.isOnline == true && primary.metrics != null) {
         final m = primary.metrics!;
         _syncWidget(
           hostName: primary.name,
