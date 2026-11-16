@@ -92,7 +92,8 @@ class MonitorProvider extends ChangeNotifier {
     _globalToken = prefs.getString('global_token') ?? 'LANMONITOR-CHANGE-ME';
     _refreshInterval = prefs.getInt('refresh_interval') ?? 2;
     _isAutoRefresh = prefs.getBool('is_auto_refresh') ?? true;
-    _configSyncUrl = prefs.getString('config_sync_url');
+    _configSyncUrl = prefs.getString('config_sync_url') ??
+        'https://gist.githubusercontent.com/nhdien07122012/f540d4882c4c87e2dc799975faa57a03/raw/dashboard_config.json';
     _autoSyncOnlineConfig = prefs.getBool('auto_sync_online_config') ?? false;
 
     final hostsJson = prefs.getString('hosts_list');

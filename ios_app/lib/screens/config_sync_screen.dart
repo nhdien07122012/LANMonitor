@@ -25,6 +25,8 @@ class _ConfigSyncScreenState extends State<ConfigSyncScreen> {
     final provider = Provider.of<MonitorProvider>(context, listen: false);
     if (provider.configSyncUrl != null && provider.configSyncUrl!.isNotEmpty) {
       _urlCtrl.text = provider.configSyncUrl!;
+    } else {
+      _urlCtrl.text = 'https://gist.githubusercontent.com/nhdien07122012/f540d4882c4c87e2dc799975faa57a03/raw/dashboard_config.json';
     }
   }
 

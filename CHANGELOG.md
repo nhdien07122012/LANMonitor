@@ -4,6 +4,23 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.2.1] - 2026-11-16 (Build 18)
+- **Mục tiêu thay đổi**: Tạo Gist trực tuyến công khai và tích hợp sẵn URL đồng bộ mặc định cho file `dashboard_config.json` vào ứng dụng, giúp người dùng mở màn hình đồng bộ là có sẵn link tải ngay không cần gõ hay dán thủ công.
+- **Commit SHA**: `PENDING_COMMIT_SHA`
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert PENDING_COMMIT_SHA --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa**:
+  - `ios_app/lib/screens/config_sync_screen.dart`:
+    - Tự động điền sẵn URL đồng bộ trực tuyến `https://gist.githubusercontent.com/nhdien07122012/f540d4882c4c87e2dc799975faa57a03/raw/dashboard_config.json` khi mở màn hình.
+  - `ios_app/lib/providers/monitor_provider.dart`:
+    - Đặt URL Gist làm giá trị mặc định cho `_configSyncUrl` khi chưa có cấu hình trước đó.
+  - `ios_app/pubspec.yaml`, `ios_app/configure_widget_target.rb`, `ios_app/LANMonitorWidget/Info.plist`, `ios_app/ios_widget/Info.plist`, `.github/workflows/build_ios.yml`:
+    - Nâng phiên bản đồng bộ lên `v1.2.1` (Build `18`).
+
+---
+
 ## [v1.2.0] - 2026-11-16 (Build 17)
 - **Mục tiêu thay đổi**:
   1. Chuyển đổi Widget từ theo dõi chi tiết 1 máy thành **Widget Giám sát Trạng thái Toàn bộ Máy tính (Hosts Status Overview)**: hiển thị danh sách các máy, trạng thái Online/Offline, số lượng máy đang chạy; hỗ trợ bấm trực tiếp vào từng máy trên widget để mở app và điều hướng thẳng đến màn hình chi tiết thông số qua deep link (`lanmonitor://host?id=...`).

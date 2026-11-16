@@ -221,8 +221,8 @@ jobs:
           with open(ext_plist, 'rb') as f:
               ext_pl = plistlib.load(f)
 
-          version = app_pl.get('CFBundleShortVersionString', '1.2.0')
-          build = app_pl.get('CFBundleVersion', '17')
+          version = app_pl.get('CFBundleShortVersionString', '1.2.1')
+          build = app_pl.get('CFBundleVersion', '18')
           app_id = app_pl.get('CFBundleIdentifier', 'com.lanmonitor.lanMonitor')
           min_os = app_pl.get('MinimumOSVersion', '15.0')
 
@@ -279,9 +279,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.2.0
-          name: "LAN Monitor iOS v1.2.0"
-          body: "Bản v1.2.0: Nâng cấp toàn diện Widget và Hệ thống Cấu hình. (1) Thay thế widget chỉ số bằng Widget Giám sát Danh sách các máy đang hoạt động (Hosts Status Overview), hỗ trợ chạm vào từng máy để mở trực tiếp màn hình chi tiết thông số trong app qua deep link. (2) Bổ sung màn hình Đồng bộ Cấu hình dashboard_config.json như trên Windows, hỗ trợ nạp online qua URL, dán JSON trực tiếp, khôi phục từ file gốc và xuất cấu hình."
+          tag_name: v1.2.1
+          name: "LAN Monitor iOS v1.2.1"
+          body: "Bản v1.2.1: Tích hợp sẵn URL đồng bộ trực tuyến mặc định cho file dashboard_config.json qua GitHub Gist. Widget giám sát danh sách máy hỗ trợ chạm mở thông số chi tiết qua deep link."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false
