@@ -6,10 +6,10 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ## [v1.2.1] - 2026-11-16 (Build 18)
 - **Mục tiêu thay đổi**: Tạo Gist trực tuyến công khai và tích hợp sẵn URL đồng bộ mặc định cho file `dashboard_config.json` vào ứng dụng, giúp người dùng mở màn hình đồng bộ là có sẵn link tải ngay không cần gõ hay dán thủ công.
-- **Commit SHA**: `PENDING_COMMIT_SHA`
+- **Commit SHA**: `2c072f7`
 - **Lệnh hoàn tác mẫu (Rollback)**:
   ```bash
-  git revert PENDING_COMMIT_SHA --no-edit
+  git revert 2c072f7 --no-edit
   ```
 - **Chi tiết kỹ thuật các file đã chỉnh sửa**:
   - `ios_app/lib/screens/config_sync_screen.dart`:
