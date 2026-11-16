@@ -70,10 +70,6 @@ import WidgetKit
             UserDefaults.standard.set(v, forKey: k)
           }
           UserDefaults.standard.synchronize()
-                try? data.write(to: fileURL)
-              }
-            }
-          }
           if #available(iOS 14.0, *) {
             WidgetCenter.shared.reloadAllTimelines()
           }
