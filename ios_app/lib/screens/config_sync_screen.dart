@@ -338,7 +338,7 @@ class _ConfigSyncScreenState extends State<ConfigSyncScreen> {
                 CupertinoTextField(
                   controller: _jsonCtrl,
                   maxLines: 8,
-                  placeholder: '{\n  "token": "LANMONITOR-CHANGE-ME",\n  "hosts": [\n    {"name": "Máy cơ quan", "ip": "192.168.1.10"}\n  ]\n}',
+                  placeholder: '{\n  "token": "LANMONITOR-CHANGE-ME",\n  "hosts": [\n    {"name": "Máy tính (Tailscale)", "ip": "100.66.18.111"}\n  ]\n}',
                   padding: const EdgeInsets.all(10),
                   style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: primaryText),
                   decoration: BoxDecoration(

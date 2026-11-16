@@ -4,6 +4,31 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.2.3] - 2026-11-16 (Build 20)
+- **Mục tiêu thay đổi**:
+  1. **Thay đổi thiết bị mặc định sang Tailscale IP `100.66.18.111`**: Thiết lập máy mặc định duy nhất là `"Máy tính (Tailscale)"` với IP `100.66.18.111`, port `8765`.
+  2. **Tự động dọn dẹp triệt để các máy ảo cũ (192.168.1.10 & 100.100.100.100)**: Ngay khi ứng dụng khởi động hoặc khôi phục, tự động quét và xóa sạch các mục máy mẫu không thể kết nối, đảm bảo khi cài app đè lên không bị vướng lại máy ảo cũ.
+  3. **Cập nhật đồng bộ toàn bộ file cấu hình**: Cập nhật file `dashboard_config.json`, file tài nguyên `ios_app/assets/dashboard_config.json`, và cập nhật trực tiếp dữ liệu GitHub Gist API sang IP mới `100.66.18.111`.
+- **Phiên bản & Tag**: `v1.2.3` (Build 20)
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert HEAD --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa**:
+  - `dashboard_config.json` & `ios_app/assets/dashboard_config.json`:
+    - Thay thế danh sách 2 máy cũ bằng duy nhất 1 máy: `{"name": "Máy tính (Tailscale)", "ip": "100.66.18.111"}`.
+  - `ios_app/lib/providers/monitor_provider.dart`:
+    - Thêm cơ chế tự động xóa các máy mẫu cũ (`192.168.1.10`, `100.100.100.100`) trong hàm nạp cấu hình `_loadFromPrefs()` và `clearMockHosts()`.
+    - Thiết lập máy mặc định là `100.66.18.111`.
+  - `ios_app/LANMonitorWidget/LANMonitorWidget.swift` & `ios_app/ios_widget/LANMonitorWidget.swift`:
+    - Cập nhật hàm xem trước `createPreviewEntry()` sang `100.66.18.111`.
+  - `ios_app/lib/screens/config_sync_screen.dart`:
+    - Cập nhật placeholder sang `100.66.18.111`.
+  - `ios_app/pubspec.yaml`, `ios_app/configure_widget_target.rb`, `ios_app/LANMonitorWidget/Info.plist`, `ios_app/ios_widget/Info.plist`, `.github/workflows/build_ios.yml`:
+    - Đồng bộ nâng phiên bản lên `v1.2.3` (Build `20`).
+
+---
+
 ## [v1.2.2] - 2026-11-16 (Build 19)
 - **Mục tiêu thay đổi**:
   1. **Khắc phục lỗi Widget không đồng bộ máy từ app**: Đồng bộ cả 2 khóa `widget_hosts_json` và `hosts_json` qua App Group và `UserDefaults.standard` / `widget_hosts.json`. Xóa bỏ hoàn toàn danh sách máy ảo giả định (dummy hosts) khi chưa kết nối.

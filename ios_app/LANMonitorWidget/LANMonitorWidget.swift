@@ -240,10 +240,9 @@ struct Provider: TimelineProvider {
 
     private func createPreviewEntry() -> SimpleEntry {
         let sampleHosts = [
-            HostWidgetItem(id: "1", name: "Máy làm việc", ip: "192.168.1.10", port: 8765, isOnline: true, status: "Online", cpuPercent: 35.0, ramPercent: 58.0, netSpeed: "1.2 MB/s", uptime: "14d 6h"),
-            HostWidgetItem(id: "2", name: "Máy chủ Server", ip: "192.168.1.20", port: 8765, isOnline: true, status: "Online", cpuPercent: 62.0, ramPercent: 78.0, netSpeed: "3.5 MB/s", uptime: "28d 12h")
+            HostWidgetItem(id: "host_tailscale", name: "Máy tính (Tailscale)", ip: "100.66.18.111", port: 8765, isOnline: true, status: "Online", cpuPercent: 35.0, ramPercent: 58.0, netSpeed: "1.2 MB/s", uptime: "14d 6h")
         ]
-        return SimpleEntry(date: Date(), hosts: sampleHosts, onlineCount: 2, totalCount: 2)
+        return SimpleEntry(date: Date(), hosts: sampleHosts, onlineCount: 1, totalCount: 1)
     }
 
     // MARK: - Cache & Storage

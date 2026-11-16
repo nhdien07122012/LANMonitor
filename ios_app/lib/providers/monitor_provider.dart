@@ -106,22 +106,26 @@ class MonitorProvider extends ChangeNotifier {
       }
     }
 
-    // Khôi phục thông tin máy tính mặc định nếu danh sách trống
+    // Tự động loại bỏ hoàn toàn các máy mẫu cũ không hoạt động (192.168.1.10 và 100.100.100.100)
+    _hosts.removeWhere((h) =>
+      h.name == 'Máy cơ quan' ||
+      h.name.contains('Talescale-Máy') ||
+      h.ip == '192.168.1.10' ||
+      h.ip == '100.100.100.100' ||
+      h.id == '1' ||
+      h.id == '2' ||
+      h.id == 'host_lan'
+    );
+
+    // Khởi tạo máy tính mặc định nếu danh sách trống (IP Tailscale 100.66.18.111)
     if (_hosts.isEmpty) {
       _hosts = [
-        HostModel(
-          id: 'host_lan',
-          name: 'Máy tính (LAN)',
-          ip: '192.168.1.4',
-          port: 8765,
-          token: 'LANMONITOR-CHANGE-ME',
-        ),
         HostModel(
           id: 'host_tailscale',
           name: 'Máy tính (Tailscale)',
           ip: '100.66.18.111',
           port: 8765,
-          token: 'LANMONITOR-CHANGE-ME',
+          token: _globalToken,
         ),
       ];
       _saveHostsToPrefs();
@@ -389,9 +393,20 @@ class MonitorProvider extends ChangeNotifier {
       h.ip == '192.168.1.10' ||
       h.ip == '100.100.100.100' ||
       h.id == '1' ||
-      h.id == '2'
+      h.id == '2' ||
+      h.id == 'host_lan'
     );
+    if (_hosts.isEmpty) {
+      _hosts.add(HostModel(
+        id: 'host_tailscale',
+        name: 'Máy tính (Tailscale)',
+        ip: '100.66.18.111',
+        port: 8765,
+        token: _globalToken,
+      ));
+    }
     _saveHostsToPrefs();
+    _syncHostsToWidget();
     _syncPrimaryHostToWidget();
     notifyListeners();
   }

@@ -279,9 +279,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.2.2
-          name: "LAN Monitor iOS v1.2.2"
-          body: "Bản v1.2.2: Widget chỉ hiển thị các máy đang hoạt động (Online), khắc phục triệt để lỗi không đồng bộ dữ liệu từ app, thiết kế lại toàn diện giao diện Widget Small & Medium đảm bảo chữ số rõ ràng, không bao giờ bị cắt chữ hay dấu ba chấm (...)."
+          tag_name: v1.2.3
+          name: "LAN Monitor iOS v1.2.3"
+          body: "Bản v1.2.3: Đổi cấu hình thiết bị mặc định sang Tailscale IP 100.66.18.111, tự động làm sạch toàn bộ các máy ảo cũ (192.168.1.10 & 100.100.100.100), cập nhật đồng bộ Gist Online URL và cấu hình gốc assets."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false

@@ -3,12 +3,8 @@
   "theme": "dark",
   "hosts": [
     {
-      "name": "Máy cơ quan",
-      "ip": "192.168.1.10"
-    },
-    {
-      "name": "Talescale-Máy cơ quan",
-      "ip": "100.100.100.100"
+      "name": "Máy tính (Tailscale)",
+      "ip": "100.66.18.111"
     }
   ],
   "apps": {
