@@ -45,8 +45,8 @@ else
     config.build_settings['INFOPLIST_FILE'] = "#{extension_dir}/Info.plist"
     config.build_settings['CODE_SIGN_ENTITLEMENTS'] = "#{extension_dir}/LANMonitorWidget.entitlements"
     config.build_settings['GENERATE_INFOPLIST_KEY_CFBundleDisplayName'] = 'LAN Monitor'
-    config.build_settings['MARKETING_VERSION'] = '1.1.3'
-    config.build_settings['CURRENT_PROJECT_VERSION'] = '13'
+    config.build_settings['MARKETING_VERSION'] = '1.1.4'
+    config.build_settings['CURRENT_PROJECT_VERSION'] = '14'
     config.build_settings['SWIFT_VERSION'] = '5.0'
     config.build_settings['TARGETED_DEVICE_FAMILY'] = '1,2'
     config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = ios_version

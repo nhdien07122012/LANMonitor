@@ -82,6 +82,7 @@ class MonitorProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    _syncPrimaryHostToWidget();
     _startTimer();
     refreshAll();
   }

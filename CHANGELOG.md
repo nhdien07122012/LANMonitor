@@ -4,6 +4,27 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.1.4] - 2026-11-16 (Build 14)
+- **Mục tiêu thay đổi**: Khắc phục triệt để lỗi Widget báo online nhưng các thanh tiến trình không chạy (hiển thị 0%). Sửa lỗi đăng ký MethodChannel native trong `AppDelegate.swift`, bổ sung cơ chế đồng bộ kép đa tầng (App Group UserDefaults + file `widget_data.json` trong Shared Container), loại bỏ trạng thái Online giả lập khi chưa có dữ liệu đồng bộ từ ứng dụng.
+- **Commit SHA**: *Sẽ cập nhật ngay sau khi commit*
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert HEAD --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa**:
+  - `ios_app/patch_app_delegate.py`:
+    - Gọi `super.application(...)` trước khi lấy `window?.rootViewController` để đảm bảo `FlutterViewController` đã được khởi tạo hoàn chỉnh, giúp `FlutterMethodChannel(name: "com.lanmonitor/widget")` nhận được lệnh và thực thi 100%.
+    - Bổ sung cơ chế ghi kép: Vừa lưu vào `UserDefaults(suiteName: "group.com.lanmonitor.lanMonitor")` và `UserDefaults(suiteName: "group.com.lanmonitor.app")`, vừa ghi trực tiếp tệp `widget_data.json` vào thư mục Shared Container của App Group.
+  - `ios_app/LANMonitorWidget/LANMonitorWidget.swift`:
+    - Xây dựng bộ nạp đa tầng: App Group UserDefaults ➔ `widget_data.json` container ➔ standard UserDefaults fallback.
+    - Loại bỏ cờ `isOnline = true` mặc định khi chưa từng nhận được dữ liệu đồng bộ; hiển thị thông báo "Chờ đồng bộ - Mở app để đồng bộ" thay vì báo Online giả lập kèm chỉ số 0%.
+  - `ios_app/lib/providers/monitor_provider.dart`:
+    - Kích hoạt đồng bộ thông tin máy chủ chính cho Widget ngay trong `_loadFromPrefs()` để Widget nhận dữ liệu tức thì khi mở app.
+  - `ios_app/pubspec.yaml`, `ios_app/configure_widget_target.rb`, `ios_app/LANMonitorWidget/Info.plist`, `.github/workflows/build_ios.yml`:
+    - Nâng phiên bản đồng bộ lên `v1.1.4` (Build `14`).
+
+---
+
 ## [v1.1.3] - 2026-11-16 (Build 13)
 - **Mục tiêu thay đổi**: Khắc phục triệt để lỗi Widget giữ dữ liệu cũ và đứng im khi ứng dụng mất kết nối máy chủ. Bổ sung cơ chế xử lý ngắt kết nối đa tầng: hiển thị trạng thái "Mất kết nối" kèm chấm đỏ cảnh báo, tự động reset các thanh chỉ số phần cứng về "--", hỗ trợ đồng bộ thời gian thực qua native App Group (`WidgetCenter.shared.reloadAllTimelines`) và cơ chế phát hiện timeout tự động độc lập (`secondsAgo > 300`).
 - **Commit SHA**: `7817720`

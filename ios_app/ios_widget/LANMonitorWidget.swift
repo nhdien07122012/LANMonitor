@@ -40,37 +40,113 @@ struct Provider: TimelineProvider {
     }
 
     private func createDefaultEntry() -> SimpleEntry {
-        let defaults = UserDefaults(suiteName: "group.com.lanmonitor.lanMonitor") ?? UserDefaults(suiteName: "group.com.lanmonitor.app") ?? UserDefaults.standard
-        let host = defaults.string(forKey: "widget_host") ?? defaults.string(forKey: "flutter.widget_host") ?? "DELL5548"
-        let ip = defaults.string(forKey: "widget_ip") ?? defaults.string(forKey: "flutter.widget_ip") ?? "100.66.18.111"
+        let suiteNames = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app"]
+        var loadedDict: [String: Any] = [:]
 
-        // Trạng thái kết nối từ App Group / UserDefaults
-        var isOnlineFlag = true
-        if let val = (defaults.object(forKey: "widget_is_online") as? NSNumber) ?? (defaults.object(forKey: "flutter.widget_is_online") as? NSNumber) {
-            isOnlineFlag = val.boolValue
+        // 1. Ưu tiên đọc từ App Group UserDefaults
+        for suite in suiteNames {
+            if let defs = UserDefaults(suiteName: suite), let h = defs.string(forKey: "widget_host"), !h.isEmpty {
+                for key in ["widget_host", "widget_ip", "widget_status", "widget_down_speed", "widget_up_speed", "widget_net_speed", "widget_uptime"] {
+                    if let val = defs.string(forKey: key) { loadedDict[key] = val }
+                }
+                for key in ["widget_cpu_val", "widget_ram_val", "widget_disk_val", "widget_last_updated"] {
+                    if defs.object(forKey: key) != nil { loadedDict[key] = defs.double(forKey: key) }
+                }
+                if defs.object(forKey: "widget_is_online") != nil {
+                    loadedDict["widget_is_online"] = defs.bool(forKey: "widget_is_online")
+                }
+                break
+            }
         }
 
-        // Kiểm tra hạn cập nhật dữ liệu (nếu quá 5 phút = 300,000 ms thì đánh dấu ngắt kết nối tự động)
-        var lastUpdatedMs: Double = 0
-        if let val = (defaults.object(forKey: "widget_last_updated") as? NSNumber) ?? (defaults.object(forKey: "flutter.widget_last_updated") as? NSNumber) {
-            lastUpdatedMs = val.doubleValue
+        // 2. Dự phòng: Đọc từ tệp widget_data.json trong App Group shared container
+        if loadedDict.isEmpty {
+            for suite in suiteNames {
+                if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
+                    let fileURL = containerURL.appendingPathComponent("widget_data.json")
+                    if let data = try? Data(contentsOf: fileURL),
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        loadedDict = json
+                        break
+                    }
+                }
+            }
+        }
+
+        // 3. Dự phòng cấp cuối: Đọc từ UserDefaults.standard
+        if loadedDict.isEmpty {
+            let defs = UserDefaults.standard
+            if let h = defs.string(forKey: "widget_host") ?? defs.string(forKey: "flutter.widget_host"), !h.isEmpty {
+                loadedDict["widget_host"] = h
+                loadedDict["widget_ip"] = defs.string(forKey: "widget_ip") ?? defs.string(forKey: "flutter.widget_ip")
+                loadedDict["widget_status"] = defs.string(forKey: "widget_status") ?? defs.string(forKey: "flutter.widget_status")
+                loadedDict["widget_is_online"] = (defs.object(forKey: "widget_is_online") as? NSNumber)?.boolValue ?? (defs.object(forKey: "flutter.widget_is_online") as? NSNumber)?.boolValue
+                loadedDict["widget_cpu_val"] = defs.double(forKey: "widget_cpu_val") > 0 ? defs.double(forKey: "widget_cpu_val") : defs.double(forKey: "flutter.widget_cpu_val")
+                loadedDict["widget_ram_val"] = defs.double(forKey: "widget_ram_val") > 0 ? defs.double(forKey: "widget_ram_val") : defs.double(forKey: "flutter.widget_ram_val")
+                loadedDict["widget_disk_val"] = defs.double(forKey: "widget_disk_val") > 0 ? defs.double(forKey: "widget_disk_val") : defs.double(forKey: "flutter.widget_disk_val")
+                loadedDict["widget_down_speed"] = defs.string(forKey: "widget_down_speed") ?? defs.string(forKey: "flutter.widget_down_speed")
+                loadedDict["widget_up_speed"] = defs.string(forKey: "widget_up_speed") ?? defs.string(forKey: "flutter.widget_up_speed")
+                loadedDict["widget_net_speed"] = defs.string(forKey: "widget_net_speed") ?? defs.string(forKey: "flutter.widget_net_speed")
+                loadedDict["widget_uptime"] = defs.string(forKey: "widget_uptime") ?? defs.string(forKey: "flutter.widget_uptime")
+                loadedDict["widget_last_updated"] = (defs.object(forKey: "widget_last_updated") as? NSNumber)?.doubleValue ?? (defs.object(forKey: "flutter.widget_last_updated") as? NSNumber)?.doubleValue
+            }
+        }
+
+        // Nếu hoàn toàn chưa có dữ liệu đồng bộ
+        if loadedDict.isEmpty {
+            return SimpleEntry(
+                date: Date(),
+                hostName: "Chưa kết nối",
+                ip: "Mở app để đồng bộ",
+                status: "Chờ đồng bộ",
+                isOnline: false,
+                cpu: "--",
+                cpuPercent: 0.0,
+                ram: "--",
+                ramPercent: 0.0,
+                disk: "--",
+                diskPercent: 0.0,
+                downloadSpeed: "↓ --",
+                uploadSpeed: "↑ --",
+                netSpeed: "--",
+                uptime: "--"
+            )
+        }
+
+        let host = loadedDict["widget_host"] as? String ?? "LAN Monitor"
+        let ip = loadedDict["widget_ip"] as? String ?? "--"
+
+        let isOnlinePref: Bool
+        if let val = loadedDict["widget_is_online"] as? Bool {
+            isOnlinePref = val
+        } else if let num = loadedDict["widget_is_online"] as? NSNumber {
+            isOnlinePref = num.boolValue
+        } else {
+            isOnlinePref = false
+        }
+
+        let lastUpdatedMs: Double
+        if let val = loadedDict["widget_last_updated"] as? Double {
+            lastUpdatedMs = val
+        } else if let num = loadedDict["widget_last_updated"] as? NSNumber {
+            lastUpdatedMs = num.doubleValue
+        } else {
+            lastUpdatedMs = 0
         }
 
         let nowMs = Date().timeIntervalSince1970 * 1000.0
         let isStale = (lastUpdatedMs > 0) && ((nowMs - lastUpdatedMs) > 300000)
-
-        // Trạng thái online thực tế
-        let effectiveOnline = isOnlineFlag && !isStale
+        let effectiveOnline = isOnlinePref && !isStale
 
         let statusText: String
         if !effectiveOnline {
             if isStale {
                 statusText = "Mất kết nối (Quá hạn)"
             } else {
-                statusText = defaults.string(forKey: "widget_status") ?? defaults.string(forKey: "flutter.widget_status") ?? "Mất kết nối"
+                statusText = loadedDict["widget_status"] as? String ?? "Mất kết nối"
             }
         } else {
-            statusText = defaults.string(forKey: "widget_status") ?? defaults.string(forKey: "flutter.widget_status") ?? "Online"
+            statusText = loadedDict["widget_status"] as? String ?? "Online"
         }
 
         let cpuVal: Double
@@ -82,19 +158,13 @@ struct Provider: TimelineProvider {
         let uptime: String
 
         if effectiveOnline {
-            let cpuRaw = (defaults.object(forKey: "widget_cpu_val") as? NSNumber)?.doubleValue ?? (defaults.object(forKey: "flutter.widget_cpu_val") as? NSNumber)?.doubleValue
-            cpuVal = cpuRaw ?? 0.0
-
-            let ramRaw = (defaults.object(forKey: "widget_ram_val") as? NSNumber)?.doubleValue ?? (defaults.object(forKey: "flutter.widget_ram_val") as? NSNumber)?.doubleValue
-            ramVal = ramRaw ?? 0.0
-
-            let diskRaw = (defaults.object(forKey: "widget_disk_val") as? NSNumber)?.doubleValue ?? (defaults.object(forKey: "flutter.widget_disk_val") as? NSNumber)?.doubleValue
-            diskVal = diskRaw ?? 0.0
-
-            downSpeed = defaults.string(forKey: "widget_down_speed") ?? defaults.string(forKey: "flutter.widget_down_speed") ?? "↓ 0 B/s"
-            upSpeed = defaults.string(forKey: "widget_up_speed") ?? defaults.string(forKey: "flutter.widget_up_speed") ?? "↑ 0 B/s"
-            netSpeed = defaults.string(forKey: "widget_net_speed") ?? defaults.string(forKey: "flutter.widget_net_speed") ?? "0 B/s"
-            uptime = defaults.string(forKey: "widget_uptime") ?? defaults.string(forKey: "flutter.widget_uptime") ?? "--"
+            cpuVal = (loadedDict["widget_cpu_val"] as? Double) ?? ((loadedDict["widget_cpu_val"] as? NSNumber)?.doubleValue ?? 0.0)
+            ramVal = (loadedDict["widget_ram_val"] as? Double) ?? ((loadedDict["widget_ram_val"] as? NSNumber)?.doubleValue ?? 0.0)
+            diskVal = (loadedDict["widget_disk_val"] as? Double) ?? ((loadedDict["widget_disk_val"] as? NSNumber)?.doubleValue ?? 0.0)
+            downSpeed = loadedDict["widget_down_speed"] as? String ?? "↓ 0 B/s"
+            upSpeed = loadedDict["widget_up_speed"] as? String ?? "↑ 0 B/s"
+            netSpeed = loadedDict["widget_net_speed"] as? String ?? "0 B/s"
+            uptime = loadedDict["widget_uptime"] as? String ?? "--"
         } else {
             cpuVal = 0.0
             ramVal = 0.0

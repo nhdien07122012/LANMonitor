@@ -18,28 +18,49 @@ import WidgetKit
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
 
-    if let controller = window?.rootViewController as? FlutterViewController {
+    // Call super first to ensure window and rootViewController are properly initialized
+    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+
+    // Retrieve FlutterViewController after window initialization
+    let rootVC = window?.rootViewController ?? UIApplication.shared.windows.first?.rootViewController
+    if let controller = rootVC as? FlutterViewController {
       let channel = FlutterMethodChannel(name: "com.lanmonitor/widget", binaryMessenger: controller.binaryMessenger)
-      channel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
+      channel.setMethodCallHandler { (call: FlutterMethodCall, resultHandler: @escaping FlutterResult) in
         if call.method == "updateWidget", let args = call.arguments as? [String: Any] {
-          let defaults = UserDefaults(suiteName: "group.com.lanmonitor.lanMonitor") ?? UserDefaults(suiteName: "group.com.lanmonitor.app")
-          if let defaults = defaults {
-            for (key, val) in args {
-              defaults.set(val, forKey: key)
+          let suiteNames = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app"]
+          
+          // 1. Write to App Group UserDefaults
+          for suite in suiteNames {
+            if let defaults = UserDefaults(suiteName: suite) {
+              for (key, val) in args {
+                defaults.set(val, forKey: key)
+              }
+              defaults.synchronize()
             }
-            defaults.synchronize()
           }
+
+          // 2. Dual redundancy: Write to shared App Group container JSON file
+          for suite in suiteNames {
+            if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
+              let fileURL = containerURL.appendingPathComponent("widget_data.json")
+              if let jsonData = try? JSONSerialization.data(withJSONObject: args, options: []) {
+                try? jsonData.write(to: fileURL)
+              }
+            }
+          }
+
+          // 3. Request WidgetKit reload immediately
           if #available(iOS 14.0, *) {
             WidgetCenter.shared.reloadAllTimelines()
           }
-          result(true)
+          resultHandler(true)
         } else {
-          result(FlutterMethodNotImplemented)
+          resultHandler(FlutterMethodNotImplemented)
         }
       }
     }
 
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    return result
   }
 }
 """
