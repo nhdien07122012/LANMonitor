@@ -224,12 +224,23 @@ class MonitorProvider extends ChangeNotifier {
       'uptime': h.metrics?.formattedUptime ?? '--',
     }).toList();
 
+    final hostsJson = json.encode(hostsList);
     final data = <String, dynamic>{
       'hosts_count': _hosts.length,
       'online_count': onlineCount,
-      'hosts_json': json.encode(hostsList),
+      'hosts_json': hostsJson,
+      'widget_hosts_json': hostsJson,
+      'widget_token': _globalToken,
       'last_updated': DateTime.now().millisecondsSinceEpoch,
     };
+
+    // Dự phòng lưu trực tiếp vào SharedPreferences
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('widget_hosts_json', hostsJson);
+      await prefs.setString('hosts_json', hostsJson);
+      await prefs.setString('widget_token', _globalToken);
+    } catch (_) {}
 
     try {
       await _widgetChannel.invokeMethod('updateWidgetHosts', data);

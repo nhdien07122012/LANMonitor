@@ -4,6 +4,40 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.2.2] - 2026-11-16 (Build 19)
+- **Mục tiêu thay đổi**:
+  1. **Khắc phục lỗi Widget không đồng bộ máy từ app**: Đồng bộ cả 2 khóa `widget_hosts_json` và `hosts_json` qua App Group và `UserDefaults.standard` / `widget_hosts.json`. Xóa bỏ hoàn toàn danh sách máy ảo giả định (dummy hosts) khi chưa kết nối.
+  2. **Chỉ hiển thị các máy đang hoạt động (Active Hosts Only)**: Bộ lọc `entry.hosts.filter { $0.isOnline }` loại bỏ toàn bộ các máy đang tắt/ngoại tuyến khỏi Widget.
+  3. **Thiết kế lại toàn diện giao diện Widget Small & Medium - Không mất chữ**:
+     - *Khi 0 máy online*: Hiển thị thông báo tinh tế "Không có máy online" / "Tất cả máy đang tắt", kèm nút chạm mở app.
+     - *Khi 1 máy online (Small Widget)*: Hiển thị thẻ chuyên biệt kích thước lớn: Tên máy cỡ 14pt bold 2 dòng (tự co giãn chữ, không bao giờ bị cắt '...'), địa chỉ IP monospaced riêng biệt 1 dòng, badge CPU, tốc độ mạng tải xuống và thời gian Uptime rõ nét.
+     - *Khi 2 máy online trở lên*: Mỗi máy có 2 dòng (dòng 1: Tên + CPU%, dòng 2: IP + tốc độ tải), loại bỏ tình trạng co kéo chiều ngang gây mất chữ.
+     - *Medium Widget*: Thẻ máy tính ngang rộng rãi, hiển thị CPU, RAM, Tốc độ tải, hỗ trợ chạm trực tiếp vào từng máy để mở chi tiết thông số.
+  4. **Tự động làm mới khi mở lại ứng dụng**: Tích hợp `WidgetsBindingObserver` trong `DashboardScreen` để làm mới danh sách máy và đẩy dữ liệu tức thì sang Widget ngay khi app được mở từ màn hình chính hoặc từ Widget tap.
+- **Phiên bản & Tag**: `v1.2.2` (Build 19)
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert HEAD --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa**:
+  - `ios_app/lib/providers/monitor_provider.dart`:
+    - Bổ sung gửi đồng thời `hosts_json`, `widget_hosts_json`, `widget_token` trong `_syncHostsToWidget()`.
+    - Thêm dự phòng lưu trực tiếp vào `SharedPreferences`.
+  - `ios_app/lib/screens/dashboard_screen.dart`:
+    - Thêm mixin `WidgetsBindingObserver` để tự động gọi `provider.refreshAll()` khi app chuyển sang trạng thái `resumed`.
+  - `ios_app/patch_app_delegate.py`:
+    - Lưu thêm bản sao dữ liệu vào `UserDefaults.standard` bên cạnh App Group UserDefaults và file `widget_hosts.json`.
+  - `ios_app/LANMonitorWidget/LANMonitorWidget.swift` & `ios_app/ios_widget/LANMonitorWidget.swift`:
+    - Cập nhật hàm `loadCachedHosts()` tìm kiếm qua nhiều tầng lưu trữ (`widget_hosts_json`, `hosts_json`, App Groups, UserDefaults standard, JSON container).
+    - Xóa bỏ danh sách dummy hosts mặc định ("Máy cơ quan", "Talescale-Máy cơ quan", "SRO130").
+    - Thêm cơ chế bảo toàn trạng thái Online từ app trong vòng 3 phút khi Widget chạy nền gặp giới hạn mạng sandbox.
+    - Tái cấu trúc `SmallWidgetView` thành 3 chế độ: `emptyView`, `singleHostView`, `multiHostsView` với `minimumScaleFactor(0.8)` đảm bảo không cắt chữ hay xuất hiện `...`.
+    - Tái cấu trúc `MediumWidgetView` với bộ lọc chỉ máy đang hoạt động.
+  - `ios_app/pubspec.yaml`, `ios_app/configure_widget_target.rb`, `ios_app/LANMonitorWidget/Info.plist`, `ios_app/ios_widget/Info.plist`, `.github/workflows/build_ios.yml`:
+    - Đồng bộ nâng phiên bản lên `v1.2.2` (Build `19`).
+
+---
+
 ## [v1.2.1] - 2026-11-16 (Build 18)
 - **Mục tiêu thay đổi**: Tạo Gist trực tuyến công khai và tích hợp sẵn URL đồng bộ mặc định cho file `dashboard_config.json` vào ứng dụng, giúp người dùng mở màn hình đồng bộ là có sẵn link tải ngay không cần gõ hay dán thủ công.
 - **Commit SHA**: `2c072f7`

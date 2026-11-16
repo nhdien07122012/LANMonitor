@@ -43,6 +43,10 @@ import WidgetKit
               }
             }
           }
+          for (k, v) in args {
+            UserDefaults.standard.set(v, forKey: k)
+          }
+          UserDefaults.standard.synchronize()
           if #available(iOS 14.0, *) {
             WidgetCenter.shared.reloadAllTimelines()
           }
@@ -58,6 +62,14 @@ import WidgetKit
             if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
               let fileURL = url.appendingPathComponent("widget_data.json")
               if let data = try? JSONSerialization.data(withJSONObject: args) {
+                try? data.write(to: fileURL)
+              }
+            }
+          }
+          for (k, v) in args {
+            UserDefaults.standard.set(v, forKey: k)
+          }
+          UserDefaults.standard.synchronize()
                 try? data.write(to: fileURL)
               }
             }

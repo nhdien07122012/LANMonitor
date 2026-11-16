@@ -135,22 +135,40 @@ struct Provider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
-        var hosts = loadCachedHosts()
-        if hosts.isEmpty {
-            hosts = getDefaultHosts()
+        let cachedHosts = loadCachedHosts()
+        if cachedHosts.isEmpty {
+            let entry = SimpleEntry(date: Date(), hosts: [], onlineCount: 0, totalCount: 0)
+            let nextDate = Calendar.current.date(byAdding: .minute, value: 5, to: Date()) ?? Date().addingTimeInterval(300)
+            completion(Timeline(entries: [entry], policy: .after(nextDate)))
+            return
         }
 
         let token = loadToken()
+        let lastUpdatedMs = loadLastUpdated()
+        let nowMs = Date().timeIntervalSince1970 * 1000.0
+        let isCacheFreshFromApp = (nowMs - lastUpdatedMs) < 180000.0 // Trong vòng 3 phút kể từ lần app đồng bộ
+
         let group = DispatchGroup()
         let lock = NSLock()
-        var updatedHosts = hosts
+        var updatedHosts = cachedHosts
 
-        for index in 0..<hosts.count {
+        for index in 0..<cachedHosts.count {
             group.enter()
-            let host = hosts[index]
+            let host = cachedHosts[index]
             checkHostStatus(host: host, token: token) { updated in
                 lock.lock()
-                updatedHosts[index] = updated
+                if updated.isOnline {
+                    updatedHosts[index] = updated
+                } else {
+                    // Nếu truy vấn mạng trực tiếp từ widget bị lỗi (thường do sandbox mạng nội bộ của iOS khi widget chạy nền),
+                    // nhưng app chính vừa mới đồng bộ máy đó là Online, ta giữ nguyên trạng thái Online của app
+                    // để tránh chập chờn báo Offline sai lệch!
+                    if isCacheFreshFromApp && host.isOnline {
+                        updatedHosts[index] = host
+                    } else {
+                        updatedHosts[index] = updated
+                    }
+                }
                 lock.unlock()
                 group.leave()
             }
@@ -160,7 +178,7 @@ struct Provider: TimelineProvider {
             self.saveCachedHosts(hosts: updatedHosts)
             let online = updatedHosts.filter { $0.isOnline }.count
             let entry = SimpleEntry(date: Date(), hosts: updatedHosts, onlineCount: online, totalCount: updatedHosts.count)
-            let nextDate = Calendar.current.date(byAdding: .minute, value: 1, to: Date()) ?? Date().addingTimeInterval(60)
+            let nextDate = Calendar.current.date(byAdding: .minute, value: 2, to: Date()) ?? Date().addingTimeInterval(120)
             let timeline = Timeline(entries: [entry], policy: .after(nextDate))
             completion(timeline)
         }
@@ -207,8 +225,8 @@ struct Provider: TimelineProvider {
             if let metrics = try? JSONDecoder().decode(AgentMetricsResponse.self, from: data) {
                 res.isOnline = true
                 res.status = "Online"
-                res.cpuPercent = metrics.cpu_percent ?? 0.0
-                res.ramPercent = metrics.ram_percent ?? 0.0
+                res.cpuPercent = metrics.cpu_percent ?? res.cpuPercent
+                res.ramPercent = metrics.ram_percent ?? res.ramPercent
                 res.netSpeed = formatWidgetSpeed(metrics.download_bps ?? 0.0)
                 res.uptime = formatWidgetUptime(metrics.uptime_sec ?? 0.0)
             } else {
@@ -222,40 +240,51 @@ struct Provider: TimelineProvider {
 
     private func createPreviewEntry() -> SimpleEntry {
         let sampleHosts = [
-            HostWidgetItem(id: "1", name: "Máy cơ quan", ip: "192.168.1.10", port: 8765, isOnline: true, status: "Online", cpuPercent: 38.0, ramPercent: 65.0, netSpeed: "1.2 MB/s", uptime: "14d 6h"),
-            HostWidgetItem(id: "2", name: "Talescale-Máy cơ quan", ip: "100.100.100.100", port: 8765, isOnline: true, status: "Online", cpuPercent: 42.0, ramPercent: 65.0, netSpeed: "850 KB/s", uptime: "14d 6h"),
-            HostWidgetItem(id: "3", name: "Máy tính cá nhân", ip: "192.168.1.4", port: 8765, isOnline: false, status: "Mất kết nối", cpuPercent: 0.0, ramPercent: 0.0, netSpeed: "--", uptime: "--")
+            HostWidgetItem(id: "1", name: "Máy làm việc", ip: "192.168.1.10", port: 8765, isOnline: true, status: "Online", cpuPercent: 35.0, ramPercent: 58.0, netSpeed: "1.2 MB/s", uptime: "14d 6h"),
+            HostWidgetItem(id: "2", name: "Máy chủ Server", ip: "192.168.1.20", port: 8765, isOnline: true, status: "Online", cpuPercent: 62.0, ramPercent: 78.0, netSpeed: "3.5 MB/s", uptime: "28d 12h")
         ]
-        return SimpleEntry(date: Date(), hosts: sampleHosts, onlineCount: 2, totalCount: 3)
-    }
-
-    private func getDefaultHosts() -> [HostWidgetItem] {
-        return [
-            HostWidgetItem(id: "1", name: "Máy cơ quan", ip: "192.168.1.10", port: 8765),
-            HostWidgetItem(id: "2", name: "Talescale-Máy cơ quan", ip: "100.100.100.100", port: 8765),
-            HostWidgetItem(id: "3", name: "SRO130 (LAN)", ip: "192.168.1.4", port: 8765)
-        ]
+        return SimpleEntry(date: Date(), hosts: sampleHosts, onlineCount: 2, totalCount: 2)
     }
 
     // MARK: - Cache & Storage
     private func loadCachedHosts() -> [HostWidgetItem] {
+        let keysToCheck = ["widget_hosts_json", "hosts_json"]
+
+        // 1. Kiểm tra App Group UserDefaults
         for suite in suiteNames {
-            if let defs = UserDefaults(suiteName: suite), let jsonStr = defs.string(forKey: "widget_hosts_json"), let data = jsonStr.data(using: .utf8) {
-                if let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: data), !hosts.isEmpty {
-                    return hosts
+            if let defs = UserDefaults(suiteName: suite) {
+                for key in keysToCheck {
+                    if let jsonStr = defs.string(forKey: key), let data = jsonStr.data(using: .utf8) {
+                        if let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: data), !hosts.isEmpty {
+                            return hosts
+                        }
+                    }
                 }
             }
             if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
                 let fileURL = containerURL.appendingPathComponent("widget_hosts.json")
                 if let data = try? Data(contentsOf: fileURL),
-                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let jsonStr = dict["hosts_json"] as? String,
-                   let jsonData = jsonStr.data(using: .utf8),
-                   let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: jsonData), !hosts.isEmpty {
+                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    for key in keysToCheck {
+                        if let jsonStr = dict[key] as? String,
+                           let jsonData = jsonStr.data(using: .utf8),
+                           let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: jsonData), !hosts.isEmpty {
+                            return hosts
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Dự phòng Standard UserDefaults
+        for key in keysToCheck {
+            if let jsonStr = UserDefaults.standard.string(forKey: key), let data = jsonStr.data(using: .utf8) {
+                if let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: data), !hosts.isEmpty {
                     return hosts
                 }
             }
         }
+
         return []
     }
 
@@ -264,6 +293,7 @@ struct Provider: TimelineProvider {
         let online = hosts.filter { $0.isOnline }.count
         let dict: [String: Any] = [
             "hosts_json": jsonStr,
+            "widget_hosts_json": jsonStr,
             "hosts_count": hosts.count,
             "online_count": online,
             "last_updated": Date().timeIntervalSince1970 * 1000.0
@@ -272,6 +302,7 @@ struct Provider: TimelineProvider {
         for suite in suiteNames {
             if let defs = UserDefaults(suiteName: suite) {
                 defs.set(jsonStr, forKey: "widget_hosts_json")
+                defs.set(jsonStr, forKey: "hosts_json")
                 defs.set(hosts.count, forKey: "widget_hosts_count")
                 defs.set(online, forKey: "widget_online_count")
                 defs.synchronize()
@@ -283,6 +314,10 @@ struct Provider: TimelineProvider {
                 }
             }
         }
+
+        UserDefaults.standard.set(jsonStr, forKey: "widget_hosts_json")
+        UserDefaults.standard.set(jsonStr, forKey: "hosts_json")
+        UserDefaults.standard.synchronize()
     }
 
     private func loadToken() -> String {
@@ -291,7 +326,20 @@ struct Provider: TimelineProvider {
                 return t
             }
         }
+        if let t = UserDefaults.standard.string(forKey: "widget_token"), !t.isEmpty {
+            return t
+        }
         return "LANMONITOR-CHANGE-ME"
+    }
+
+    private func loadLastUpdated() -> Double {
+        for suite in suiteNames {
+            if let defs = UserDefaults(suiteName: suite) {
+                let t = defs.double(forKey: "last_updated")
+                if t > 0 { return t }
+            }
+        }
+        return UserDefaults.standard.double(forKey: "last_updated")
     }
 }
 
@@ -342,77 +390,69 @@ struct WidgetTheme {
     }
 }
 
-// MARK: - Views: Host Overview Widget (Tapping opens host directly in App)
+// MARK: - Views: Host Overview Widget (CHỈ HIỆN MÁY ĐANG HOẠT ĐỘNG, BẢO ĐẢM KHÔNG MẤT CHỮ)
 struct SmallWidgetView: View {
     var entry: SimpleEntry
     var theme: WidgetTheme
 
+    var activeHosts: [HostWidgetItem] {
+        entry.hosts.filter { $0.isOnline }
+    }
+
     var topHost: HostWidgetItem? {
-        entry.hosts.first
+        activeHosts.first
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            // Header
+        Group {
+            if activeHosts.isEmpty {
+                emptyView
+            } else if activeHosts.count == 1, let host = topHost {
+                singleHostView(host: host)
+            } else {
+                multiHostsView
+            }
+        }
+        .widgetURL(URL(string: topHost != nil ? "lanmonitor://host?id=\(topHost!.id)&ip=\(topHost!.ip)" : "lanmonitor://open"))
+    }
+
+    // Giao diện khi không có máy nào đang hoạt động
+    private var emptyView: some View {
+        VStack(spacing: 5) {
             HStack(spacing: 4) {
                 Image(systemName: "desktopcomputer")
-                    .font(.system(size: 11))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(theme.iconTintColor)
                 Text("LAN Monitor")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(theme.titleColor)
                 Spacer()
-                HStack(spacing: 3) {
-                    Circle()
-                        .fill(entry.onlineCount > 0 ? theme.onlineColor : theme.offlineColor)
-                        .frame(width: 5, height: 5)
-                    Text("\(entry.onlineCount)/\(entry.totalCount)")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(entry.onlineCount > 0 ? theme.onlineColor : theme.offlineColor)
-                }
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(theme.cardBackground)
-                .cornerRadius(6)
+                Circle()
+                    .fill(theme.offlineColor)
+                    .frame(width: 5, height: 5)
             }
 
-            Divider().background(theme.dividerColor)
+            Spacer(minLength: 0)
 
-            // Hosts List (up to 3 items)
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(entry.hosts.prefix(3)) { host in
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(host.isOnline ? theme.onlineColor : theme.offlineColor)
-                            .frame(width: 6, height: 6)
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(host.name)
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(theme.titleColor)
-                                .lineLimit(1)
-                            Text(host.ip)
-                                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                                .foregroundColor(theme.subtitleColor)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        if host.isOnline {
-                            Text("\(Int(host.cpuPercent))%")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(theme.cpuColor)
-                        } else {
-                            Text("Offline")
-                                .font(.system(size: 8, weight: .medium))
-                                .foregroundColor(theme.offlineColor)
-                        }
-                    }
-                }
+            VStack(spacing: 4) {
+                Image(systemName: "power.circle")
+                    .font(.system(size: 24))
+                    .foregroundColor(theme.subtitleColor.opacity(0.8))
+                Text("Không có máy online")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(theme.titleColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text("Tất cả máy đang tắt")
+                    .font(.system(size: 9))
+                    .foregroundColor(theme.subtitleColor)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 0)
 
             HStack {
-                Text("Chạm để mở thông số")
+                Text("Chạm để mở app")
                     .font(.system(size: 8))
                     .foregroundColor(theme.subtitleColor.opacity(0.8))
                 Spacer()
@@ -421,7 +461,163 @@ struct SmallWidgetView: View {
                     .foregroundColor(theme.subtitleColor)
             }
         }
-        .widgetURL(URL(string: "lanmonitor://host?id=\(topHost?.id ?? "")&ip=\(topHost?.ip ?? "")"))
+    }
+
+    // Giao diện chuyên biệt khi có 1 máy đang chạy: Hiển thị đầy đủ tên, IP, CPU, tốc độ, không bao giờ bị cắt chữ
+    private func singleHostView(host: HostWidgetItem) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(theme.onlineColor)
+                    .frame(width: 6, height: 6)
+                Text("Đang chạy")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(theme.onlineColor)
+                Spacer()
+                Text("\(Int(host.cpuPercent))% CPU")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(theme.cpuColor)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(theme.cardBackground)
+                    .cornerRadius(5)
+            }
+
+            Spacer(minLength: 4)
+
+            // Tên máy (hiển thị tối đa 2 dòng, tự co giãn nhẹ font để không bao giờ bị dấu 3 chấm ...)
+            Text(host.name)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(theme.titleColor)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+
+            // Địa chỉ IP riêng biệt 1 dòng
+            Text(host.ip)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundColor(theme.subtitleColor)
+                .padding(.top, 2)
+                .lineLimit(1)
+
+            Spacer(minLength: 4)
+
+            // Thông số Tốc độ mạng & Thời gian bật máy (Uptime)
+            HStack(spacing: 5) {
+                if host.netSpeed != "--" && !host.netSpeed.isEmpty {
+                    HStack(spacing: 2) {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 7, weight: .bold))
+                        Text(host.netSpeed)
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundColor(theme.diskColor)
+                }
+                if host.uptime != "--" && !host.uptime.isEmpty {
+                    Text("•")
+                        .font(.system(size: 7))
+                        .foregroundColor(theme.subtitleColor)
+                    Text(host.uptime)
+                        .font(.system(size: 9))
+                        .foregroundColor(theme.subtitleColor)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 2)
+
+            // Footer gợi ý chạm
+            HStack {
+                Text("Chạm xem thông số")
+                    .font(.system(size: 8))
+                    .foregroundColor(theme.subtitleColor.opacity(0.8))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 7))
+                    .foregroundColor(theme.subtitleColor)
+            }
+        }
+    }
+
+    // Giao diện khi có từ 2 máy online trở lên: bố cục 2 dòng mỗi máy, tên dòng trên, IP dòng dưới
+    private var multiHostsView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Header
+            HStack(spacing: 4) {
+                Image(systemName: "desktopcomputer")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(theme.iconTintColor)
+                Text("LAN Monitor")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(theme.titleColor)
+                Spacer()
+                HStack(spacing: 3) {
+                    Circle()
+                        .fill(theme.onlineColor)
+                        .frame(width: 5, height: 5)
+                    Text("\(activeHosts.count) Online")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(theme.onlineColor)
+                }
+            }
+
+            Divider().background(theme.dividerColor).padding(.vertical, 0)
+
+            // Tối đa 2 máy online trên widget Small
+            ForEach(activeHosts.prefix(2)) { host in
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(theme.onlineColor)
+                            .frame(width: 5, height: 5)
+                        Text(host.name)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(theme.titleColor)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer(minLength: 2)
+                        Text("\(Int(host.cpuPercent))%")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(theme.cpuColor)
+                    }
+                    HStack(spacing: 4) {
+                        Text(host.ip)
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundColor(theme.subtitleColor)
+                            .lineLimit(1)
+                        Spacer(minLength: 2)
+                        if host.netSpeed != "--" && !host.netSpeed.isEmpty {
+                            Text(host.netSpeed)
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundColor(theme.diskColor)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 3)
+                .background(theme.cardBackground.opacity(0.8))
+                .cornerRadius(5)
+            }
+
+            Spacer(minLength: 0)
+
+            HStack {
+                if activeHosts.count > 2 {
+                    Text("+ \(activeHosts.count - 2) máy khác")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundColor(theme.iconTintColor)
+                } else {
+                    Text("Chạm để mở thông số")
+                        .font(.system(size: 8))
+                        .foregroundColor(theme.subtitleColor.opacity(0.8))
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 7))
+                    .foregroundColor(theme.subtitleColor)
+            }
+        }
     }
 }
 
@@ -429,78 +625,104 @@ struct MediumWidgetView: View {
     var entry: SimpleEntry
     var theme: WidgetTheme
 
+    var activeHosts: [HostWidgetItem] {
+        entry.hosts.filter { $0.isOnline }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
             // Header
             HStack(spacing: 6) {
                 Image(systemName: "desktopcomputer")
-                    .font(.system(size: 13))
+                    .font(.system(size: 12))
                     .foregroundColor(theme.iconTintColor)
                 Text("LAN Monitor")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundColor(theme.titleColor)
                 Spacer()
                 HStack(spacing: 4) {
                     Circle()
-                        .fill(entry.onlineCount > 0 ? theme.onlineColor : theme.offlineColor)
+                        .fill(activeHosts.isEmpty ? theme.offlineColor : theme.onlineColor)
                         .frame(width: 6, height: 6)
-                    Text("\(entry.onlineCount)/\(entry.totalCount) Máy Đang Chạy")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(entry.onlineCount > 0 ? theme.onlineColor : theme.offlineColor)
+                    Text(activeHosts.isEmpty ? "Tất cả ngoại tuyến" : "\(activeHosts.count) Máy Đang Hoạt Động")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(activeHosts.isEmpty ? theme.offlineColor : theme.onlineColor)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
                 .background(theme.cardBackground)
-                .cornerRadius(8)
+                .cornerRadius(6)
             }
 
             Divider().background(theme.dividerColor)
 
-            // Hosts Grid / Cards (up to 4 hosts with individual deep links)
-            VStack(spacing: 5) {
-                ForEach(entry.hosts.prefix(3)) { host in
-                    Link(destination: URL(string: "lanmonitor://host?id=\(host.id)&ip=\(host.ip)")!) {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(host.isOnline ? theme.onlineColor : theme.offlineColor)
-                                .frame(width: 7, height: 7)
+            if activeHosts.isEmpty {
+                Spacer(minLength: 0)
+                HStack {
+                    Spacer()
+                    VStack(spacing: 4) {
+                        Image(systemName: "power.circle")
+                            .font(.system(size: 24))
+                            .foregroundColor(theme.subtitleColor.opacity(0.7))
+                        Text("Không có máy tính nào đang hoạt động")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(theme.titleColor)
+                        Text("Tất cả các máy đều đang ngoại tuyến hoặc tắt nguồn")
+                            .font(.system(size: 9))
+                            .foregroundColor(theme.subtitleColor)
+                    }
+                    Spacer()
+                }
+                Spacer(minLength: 0)
+            } else {
+                // Danh sách tối đa 3 máy online kèm Link mở chi tiết từng máy
+                VStack(spacing: 4) {
+                    ForEach(activeHosts.prefix(3)) { host in
+                        Link(destination: URL(string: "lanmonitor://host?id=\(host.id)&ip=\(host.ip)")!) {
+                            HStack(spacing: 7) {
+                                Circle()
+                                    .fill(theme.onlineColor)
+                                    .frame(width: 7, height: 7)
 
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(host.name)
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundColor(theme.titleColor)
-                                    .lineLimit(1)
-                                Text(host.ip)
-                                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                    .foregroundColor(theme.subtitleColor)
-                                    .lineLimit(1)
-                            }
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(host.name)
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(theme.titleColor)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
+                                    Text(host.ip)
+                                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                        .foregroundColor(theme.subtitleColor)
+                                        .lineLimit(1)
+                                }
 
-                            Spacer()
+                                Spacer(minLength: 4)
 
-                            if host.isOnline {
                                 HStack(spacing: 6) {
                                     Text("CPU \(Int(host.cpuPercent))%")
-                                        .font(.system(size: 11, weight: .bold))
+                                        .font(.system(size: 10, weight: .bold))
                                         .foregroundColor(theme.cpuColor)
-                                    Text(host.netSpeed != "--" && !host.netSpeed.isEmpty ? host.netSpeed : "Online")
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(theme.diskColor)
+                                    if host.ramPercent > 0 {
+                                        Text("RAM \(Int(host.ramPercent))%")
+                                            .font(.system(size: 10, weight: .medium))
+                                            .foregroundColor(theme.subtitleColor)
+                                    }
+                                    if host.netSpeed != "--" && !host.netSpeed.isEmpty {
+                                        Text("↓ \(host.netSpeed)")
+                                            .font(.system(size: 9, weight: .semibold))
+                                            .foregroundColor(theme.diskColor)
+                                    }
                                 }
-                            } else {
-                                Text("Mất kết nối")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundColor(theme.offlineColor)
-                            }
 
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 8))
-                                .foregroundColor(theme.subtitleColor.opacity(0.6))
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 7))
+                                    .foregroundColor(theme.subtitleColor.opacity(0.7))
+                            }
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 7)
+                            .background(theme.cardBackground.opacity(0.7))
+                            .cornerRadius(7)
                         }
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 8)
-                        .background(theme.cardBackground.opacity(0.6))
-                        .cornerRadius(8)
                     }
                 }
             }
@@ -508,7 +730,7 @@ struct MediumWidgetView: View {
             Spacer(minLength: 0)
 
             HStack {
-                Text("Chạm vào máy để xem chi tiết thông số trong app")
+                Text(activeHosts.isEmpty ? "Chạm để mở ứng dụng" : "Chạm vào máy để xem chi tiết thông số")
                     .font(.system(size: 8, weight: .medium))
                     .foregroundColor(theme.subtitleColor)
                 Spacer()
@@ -568,8 +790,8 @@ struct LANMonitorWidget: Widget {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             LANMonitorWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Trạng thái Máy tính")
-        .description("Giám sát các máy tính đang hoạt động và chạm để xem trực tiếp thông số.")
+        .configurationDisplayName("Máy Đang Hoạt Động")
+        .description("Chỉ hiển thị các máy tính đang hoạt động và chạm để xem trực tiếp thông số.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

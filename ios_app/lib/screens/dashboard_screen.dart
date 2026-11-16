@@ -16,10 +16,11 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<MonitorProvider>(context, listen: false);
       provider.onOpenHostRequested = (host) {
@@ -31,6 +32,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       };
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Khi app mở lại từ nền hoặc khi người dùng quay lại từ Widget
+      Provider.of<MonitorProvider>(context, listen: false).refreshAll();
+    }
   }
 
   void _showAddHostDialog(BuildContext context) {

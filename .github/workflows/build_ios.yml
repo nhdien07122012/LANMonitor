@@ -279,9 +279,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.2.1
-          name: "LAN Monitor iOS v1.2.1"
-          body: "Bản v1.2.1: Tích hợp sẵn URL đồng bộ trực tuyến mặc định cho file dashboard_config.json qua GitHub Gist. Widget giám sát danh sách máy hỗ trợ chạm mở thông số chi tiết qua deep link."
+          tag_name: v1.2.2
+          name: "LAN Monitor iOS v1.2.2"
+          body: "Bản v1.2.2: Widget chỉ hiển thị các máy đang hoạt động (Online), khắc phục triệt để lỗi không đồng bộ dữ liệu từ app, thiết kế lại toàn diện giao diện Widget Small & Medium đảm bảo chữ số rõ ràng, không bao giờ bị cắt chữ hay dấu ba chấm (...)."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false
