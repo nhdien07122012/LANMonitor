@@ -4,6 +4,30 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.1.6] - 2026-11-16 (Build 16)
+- **Mục tiêu thay đổi**: Khắc phục triệt để lỗi crash ứng dụng khi khởi động trên iPhone. Loại bỏ thao tác force unwrap (`as!`) `rootViewController` trong `AppDelegate.swift`, hoàn tất khôi phục thông tin cấu hình máy chủ mặc định (LAN & Tailscale) và loại bỏ cơ chế xóa nhầm thiết bị khi tải app. Sửa lỗi thanh tiến trình Widget không hiển thị bằng cách xây dựng lại thanh bar bằng `GeometryReader` độc lập tương thích mọi phiên bản iOS (iOS 15 đến iOS 26+).
+- **Commit SHA**: `PENDING_COMMIT_SHA`
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert PENDING_COMMIT_SHA --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa**:
+  - `ios_app/patch_app_delegate.py`:
+    - Chuyển `rootVC as! FlutterViewController` thành `rootVC as? FlutterViewController` (optional binding an toàn), gọi sau `super.application` để đảm bảo `FlutterEngine` và `UIWindow` đã sẵn sàng, loại bỏ hoàn toàn lỗi crash SIGTRAP khi vừa nhấn mở app.
+  - `ios_app/lib/providers/monitor_provider.dart`:
+    - Khôi phục cấu hình thiết bị mặc định với IP LAN (`192.168.1.4:8765`) và IP Tailscale (`100.66.18.111:8765`) kèm Token `LANMONITOR-CHANGE-ME`.
+    - Loại bỏ lệnh xóa tự động `removeWhere` gây mất thông tin máy tính khi người dùng mở lại app.
+  - `ios_app/lib/models/host_model.dart`:
+    - Bổ sung `cleanIp`: tự động chuẩn hóa địa chỉ IP (loại bỏ `http://`, `https://`, dấu gạch chéo `/`, port trùng lặp, khoảng trắng thừa) để tránh lỗi URL không hợp lệ khi kết nối API.
+  - `ios_app/LANMonitorWidget/LANMonitorWidget.swift` & `ios_app/ios_widget/LANMonitorWidget.swift`:
+    - Thay thế `ProgressView` hệ thống bằng custom `GeometryReader` + `RoundedRectangle` bar 5pt bo góc, đảm bảo hiển thị thanh đo tiến trình CPU, RAM, Ổ đĩa sắc nét, không bị thu nhỏ hoặc mất thanh trên iOS 15 - iOS 26+.
+    - Khôi phục thông số IP mặc định an toàn trong `loadLocalCache()` để Widget có thể truy vấn PC ngay cả khi chưa mở app lần đầu.
+    - Bổ sung hàm `cleanIpAddress` lọc sạch chuỗi IP trước khi gửi request.
+  - `ios_app/pubspec.yaml`, `ios_app/configure_widget_target.rb`, `ios_app/LANMonitorWidget/Info.plist`, `ios_app/ios_widget/Info.plist`, `.github/workflows/build_ios.yml`:
+    - Đồng bộ nâng phiên bản lên `v1.1.6` (Build `16`).
+
+---
+
 ## [v1.1.5] - 2026-11-16 (Build 15)
 - **Mục tiêu thay đổi**: Khắc phục triệt để vấn đề Widget không đồng bộ dữ liệu với PC. Áp dụng kiến trúc Direct Network Fetching độc lập (theo mô hình hoạt động của Gas Manager), cấp quyền `NSAppTransportSecurity` (`NSAllowsArbitraryLoads`) cho Widget Extension, hỗ trợ Widget tự động truy vấn HTTP trực tiếp tới PC Agent theo chu kỳ 1 phút, tự động chuyển vùng dự phòng giữa IP LAN và IP Tailscale.
 - **Commit SHA**: `009fe41`

@@ -16,36 +16,41 @@ import WidgetKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    let controller: FlutterViewController = window?.rootViewController as! FlutterViewController
-    let channel = FlutterMethodChannel(name: "com.lanmonitor/widget", binaryMessenger: controller.binaryMessenger)
-    channel.setMethodCallHandler { (call: FlutterMethodCall, resultHandler: @escaping FlutterResult) in
-      if call.method == "updateWidget", let args = call.arguments as? [String: Any] {
-        let suiteNames = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app"]
-        for suite in suiteNames {
-          if let defs = UserDefaults(suiteName: suite) {
-            for (k, v) in args {
-              defs.set(v, forKey: k)
+    GeneratedPluginRegistrant.register(with: self)
+
+    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+
+    let rootVC = window?.rootViewController ?? UIApplication.shared.windows.first?.rootViewController
+    if let controller = rootVC as? FlutterViewController {
+      let channel = FlutterMethodChannel(name: "com.lanmonitor/widget", binaryMessenger: controller.binaryMessenger)
+      channel.setMethodCallHandler { (call: FlutterMethodCall, resultHandler: @escaping FlutterResult) in
+        if call.method == "updateWidget", let args = call.arguments as? [String: Any] {
+          let suiteNames = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app"]
+          for suite in suiteNames {
+            if let defs = UserDefaults(suiteName: suite) {
+              for (k, v) in args {
+                defs.set(v, forKey: k)
+              }
+              defs.synchronize()
             }
-            defs.synchronize()
-          }
-          if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
-            let fileURL = url.appendingPathComponent("widget_data.json")
-            if let data = try? JSONSerialization.data(withJSONObject: args) {
-              try? data.write(to: fileURL)
+            if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
+              let fileURL = url.appendingPathComponent("widget_data.json")
+              if let data = try? JSONSerialization.data(withJSONObject: args) {
+                try? data.write(to: fileURL)
+              }
             }
           }
+          if #available(iOS 14.0, *) {
+            WidgetCenter.shared.reloadAllTimelines()
+          }
+          resultHandler(true)
+        } else {
+          resultHandler(FlutterMethodNotImplemented)
         }
-        if #available(iOS 14.0, *) {
-          WidgetCenter.shared.reloadAllTimelines()
-        }
-        resultHandler(true)
-      } else {
-        resultHandler(FlutterMethodNotImplemented)
       }
     }
 
-    GeneratedPluginRegistrant.register(with: self)
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    return result
   }
 }
 """

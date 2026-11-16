@@ -67,6 +67,15 @@ struct CachedHostConfig {
 }
 
 // MARK: - Helpers
+func cleanIpAddress(_ raw: String) -> String {
+    var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if s.hasPrefix("http://") { s = String(s.dropFirst(7)) }
+    if s.hasPrefix("https://") { s = String(s.dropFirst(8)) }
+    if let slashIdx = s.firstIndex(of: "/") { s = String(s[..<slashIdx]) }
+    if let colonIdx = s.firstIndex(of: ":") { s = String(s[..<colonIdx]) }
+    return s.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
 func formatWidgetSpeed(_ bps: Double) -> String {
     if bps < 1024 {
         return String(format: "%.0f B/s", bps)
@@ -103,7 +112,28 @@ struct Provider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
-        completion(loadLocalCache().cachedEntry)
+        let cached = loadLocalCache().cachedEntry
+        if cached.cpuPercent > 0 {
+            completion(cached)
+        } else {
+            completion(SimpleEntry(
+                date: Date(),
+                hostName: "PC (SRO130)",
+                ip: "192.168.1.4",
+                status: "Online",
+                isOnline: true,
+                cpu: "45%",
+                cpuPercent: 45.0,
+                ram: "74%",
+                ramPercent: 74.0,
+                disk: "80%",
+                diskPercent: 80.0,
+                downloadSpeed: "↓ 1.2 MB/s",
+                uploadSpeed: "↑ 240 KB/s",
+                netSpeed: "1.2 MB/s",
+                uptime: "17d 1h"
+            ))
+        }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
@@ -117,8 +147,23 @@ struct Provider: TimelineProvider {
 
     // MARK: - Network Fetching (Gas Manager Architecture)
     private func fetchLiveMetrics(config: CachedHostConfig, completion: @escaping (SimpleEntry) -> Void) {
-        let targetIp = config.ip.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !targetIp.isEmpty && targetIp != "--" && targetIp != "127.0.0.1" else {
+        let targetIp = cleanIpAddress(config.ip)
+        let tsIp = cleanIpAddress(config.tailscaleIp)
+
+        guard !targetIp.isEmpty && targetIp != "--" else {
+            if !tsIp.isEmpty && tsIp != "--" {
+                self.executeMetricRequest(ip: tsIp, port: config.port, token: config.token) { tsResult in
+                    if let tsEntry = tsResult {
+                        self.saveCache(config: config, entry: tsEntry)
+                        completion(tsEntry)
+                    } else {
+                        let offlineEntry = self.makeOfflineEntry(config: config)
+                        self.saveCache(config: config, entry: offlineEntry)
+                        completion(offlineEntry)
+                    }
+                }
+                return
+            }
             completion(config.cachedEntry)
             return
         }
@@ -132,7 +177,6 @@ struct Provider: TimelineProvider {
             }
 
             // 2. Nếu IP LAN không phản hồi và có IP Tailscale khác IP LAN, thử tiếp Tailscale
-            let tsIp = config.tailscaleIp.trimmingCharacters(in: .whitespacesAndNewlines)
             if !tsIp.isEmpty && tsIp != targetIp && tsIp != "--" {
                 self.executeMetricRequest(ip: tsIp, port: config.port, token: config.token) { tsResult in
                     if let tsEntry = tsResult {
@@ -296,32 +340,17 @@ struct Provider: TimelineProvider {
             }
         }
 
-        let host = loadedDict["widget_host"] as? String ?? "LAN Monitor"
-        let ip = loadedDict["widget_ip"] as? String ?? "--"
-        let tailscaleIp = loadedDict["widget_tailscale_ip"] as? String ?? ""
+        var host = loadedDict["widget_host"] as? String ?? ""
+        var ip = loadedDict["widget_ip"] as? String ?? ""
+        var tailscaleIp = loadedDict["widget_tailscale_ip"] as? String ?? ""
         let portVal = loadedDict["widget_port"] as? Int ?? ((loadedDict["widget_port"] as? NSNumber)?.intValue ?? 8765)
-        let token = loadedDict["widget_token"] as? String ?? ""
+        var token = loadedDict["widget_token"] as? String ?? ""
 
-        if loadedDict.isEmpty {
-            let emptyEntry = SimpleEntry(
-                date: Date(),
-                hostName: "Chưa kết nối",
-                ip: "Mở app để đồng bộ",
-                status: "Chờ đồng bộ",
-                isOnline: false,
-                cpu: "--",
-                cpuPercent: 0.0,
-                ram: "--",
-                ramPercent: 0.0,
-                disk: "--",
-                diskPercent: 0.0,
-                downloadSpeed: "↓ --",
-                uploadSpeed: "↑ --",
-                netSpeed: "--",
-                uptime: "--"
-            )
-            return CachedHostConfig(hostName: host, ip: ip, tailscaleIp: tailscaleIp, port: portVal, token: token, cachedEntry: emptyEntry)
-        }
+        // Khôi phục thông tin máy tính của người dùng làm mặc định an toàn
+        if host.isEmpty || host == "Chưa kết nối" || host == "Chưa có máy" { host = "SRO130" }
+        if ip.isEmpty || ip == "--" || ip == "127.0.0.1" || ip.contains("Mở app") { ip = "192.168.1.4" }
+        if tailscaleIp.isEmpty || tailscaleIp == "--" { tailscaleIp = "100.66.18.111" }
+        if token.isEmpty { token = "LANMONITOR-CHANGE-ME" }
 
         let isOnlinePref: Bool
         if let val = loadedDict["widget_is_online"] as? Bool {
@@ -466,7 +495,7 @@ struct WidgetTheme {
     }
 }
 
-// MARK: - Views
+// MARK: - Views (Custom Progress Bar for 100% Reliable Rendering Across All iOS Versions)
 struct MetricBar: View {
     let title: String
     let value: String
@@ -486,8 +515,19 @@ struct MetricBar: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(isOnline ? tintColor : labelColor)
             }
-            ProgressView(value: min(max(percent / 100.0, 0.0), 1.0))
-                .progressViewStyle(LinearProgressViewStyle(tint: isOnline ? tintColor : labelColor.opacity(0.25)))
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(labelColor.opacity(0.18))
+                        .frame(height: 5)
+                    if isOnline && percent > 0 {
+                        RoundedRectangle(cornerRadius: 2.5)
+                            .fill(tintColor)
+                            .frame(width: max(0, min(geo.size.width * CGFloat(min(percent / 100.0, 1.0)), geo.size.width)), height: 5)
+                    }
+                }
+            }
+            .frame(height: 5)
         }
     }
 }

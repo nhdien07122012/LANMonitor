@@ -214,8 +214,8 @@ jobs:
           with open(ext_plist, 'rb') as f:
               ext_pl = plistlib.load(f)
 
-          version = app_pl.get('CFBundleShortVersionString', '1.1.5')
-          build = app_pl.get('CFBundleVersion', '15')
+          version = app_pl.get('CFBundleShortVersionString', '1.1.6')
+          build = app_pl.get('CFBundleVersion', '16')
           app_id = app_pl.get('CFBundleIdentifier', 'com.lanmonitor.lanMonitor')
           min_os = app_pl.get('MinimumOSVersion', '15.0')
 
@@ -272,9 +272,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.1.5
-          name: "LAN Monitor iOS v1.1.5"
-          body: "Bản v1.1.5: Tích hợp kiến trúc đồng bộ mạng trực tiếp (Direct Network Fetching giống Gas Manager) độc lập cho iOS Widget. Widget tự động gửi request HTTP trực tiếp đến PC Agent trên mạng LAN hoặc Tailscale, giải phóng 100% sự phụ thuộc vào ứng dụng chính; cấp quyền NSAppTransportSecurity cho Extension."
+          tag_name: v1.1.6
+          name: "LAN Monitor iOS v1.1.6"
+          body: "Bản v1.1.6: Khắc phục triệt để lỗi crash khi khởi động ứng dụng trên iPhone (sửa force-unwrap trong AppDelegate). Khôi phục cấu hình máy tính mặc định (LAN & Tailscale) và loại bỏ cơ chế xóa nhầm thiết bị. Tối ưu WidgetKit với thanh tiến trình vẽ bằng GeometryReader độc lập hiển thị chuẩn xác trên mọi phiên bản iOS, tự động fallback giữa IP LAN và Tailscale."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false

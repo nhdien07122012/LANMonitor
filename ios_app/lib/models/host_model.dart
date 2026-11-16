@@ -24,7 +24,19 @@ class HostModel {
     this.lastChecked,
   });
 
-  String get endpointUrl => 'http://$ip:$port';
+  String get cleanIp {
+    var raw = ip.trim();
+    if (raw.startsWith('http://')) raw = raw.substring(7);
+    if (raw.startsWith('https://')) raw = raw.substring(8);
+    if (raw.endsWith('/')) raw = raw.substring(0, raw.length - 1);
+    if (raw.contains(':')) {
+      final parts = raw.split(':');
+      raw = parts[0];
+    }
+    return raw;
+  }
+
+  String get endpointUrl => 'http://$cleanIp:$port';
 
   Map<String, dynamic> toJson() => {
         'id': id,

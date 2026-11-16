@@ -48,27 +48,34 @@ class MonitorProvider extends ChangeNotifier {
     _isAutoRefresh = prefs.getBool('is_auto_refresh') ?? true;
 
     final hostsJson = prefs.getString('hosts_list');
-    if (hostsJson != null) {
+    if (hostsJson != null && hostsJson.isNotEmpty) {
       try {
         final List list = json.decode(hostsJson);
         _hosts = list.map((e) => HostModel.fromJson(e)).toList();
-
-        // Tự động dọn sạch các thiết bị mẫu mặc định (Máy cơ quan / Talescale-Máy cơ quan)
-        _hosts.removeWhere((h) =>
-          h.name == 'Máy cơ quan' ||
-          h.name.contains('Talescale-Máy') ||
-          h.ip == '192.168.1.10' ||
-          h.ip == '100.100.100.100' ||
-          h.id == '1' ||
-          h.id == '2'
-        );
-        _saveHostsToPrefs();
       } catch (e) {
         debugPrint('Error loading hosts: $e');
       }
-    } else {
-      // First-time app launch: start with clean empty list or single default
-      _hosts = [];
+    }
+
+    // Khôi phục thông tin máy tính mặc định nếu danh sách trống
+    if (_hosts.isEmpty) {
+      _hosts = [
+        HostModel(
+          id: 'host_lan',
+          name: 'Máy tính (LAN)',
+          ip: '192.168.1.4',
+          port: 8765,
+          token: 'LANMONITOR-CHANGE-ME',
+        ),
+        HostModel(
+          id: 'host_tailscale',
+          name: 'Máy tính (Tailscale)',
+          ip: '100.66.18.111',
+          port: 8765,
+          token: 'LANMONITOR-CHANGE-ME',
+        ),
+      ];
+      _saveHostsToPrefs();
     }
 
     final appsJson = prefs.getString('custom_apps');
