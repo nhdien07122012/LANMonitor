@@ -6,6 +6,7 @@
 	<array>
 		<string>group.com.lanmonitor.lanMonitor</string>
 		<string>group.com.lanmonitor.app</string>
+		<string>group.com.lanmonitor</string>
 	</array>
 </dict>
 </plist>

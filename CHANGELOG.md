@@ -4,6 +4,40 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.2.4] - 2026-11-16 (Build 21)
+- **Mục tiêu thay đổi**:
+  1. **Khắc phục triệt để lỗi Widget báo "Không có máy online / Tất cả máy đang tắt" khi cài đặt qua E-Sign / AltStore / Sideload**:
+     - Do việc cài đặt ứng dụng qua các công cụ sideload (E-Sign) thường dùng chứng chỉ tự cấp hoặc chia sẻ không có quyền Apple App Group đã đăng ký, hệ thống iOS chặn việc chia sẻ App Group (`UserDefaults(suiteName:)` trả về `nil`).
+     - Bổ sung cơ chế **tự hành độc lập (autonomous fallback)** trong Widget: Khi bộ nhớ đệm rỗng hoặc chỉ có các máy cũ, Widget tự động nạp thiết bị mặc định `"Máy tính (Tailscale)"` (`100.66.18.111:8765`) và trực tiếp gửi yêu cầu HTTP đến endpoint `/metrics` thông qua mạng Tailscale của hệ thống.
+  2. **Bộ lọc dọn dẹp các máy mẫu cũ (`filterLegacyHosts`)**: Loại bỏ triệt để các máy giả lập cũ (`192.168.1.10`, `100.100.100.100`, `"Máy cơ quan"`) khỏi toàn bộ các tầng cache của Widget để tránh việc widget cố gắng truy vấn các IP này dẫn tới báo Offline sai lệch.
+  3. **Hỗ trợ kết nối qua 4G/LTE/Cellular & Tăng Timeout mạng**:
+     - Cấu hình `allowsCellularAccess = true` và `waitsForConnectivity = false` cho `URLSessionConfiguration` của Widget.
+     - Tăng thời gian chờ (timeout) từ 2.5s lên 5.0s, thích ứng tối ưu với độ trễ bắt tay mạng Tailscale qua dữ liệu di động (LTE).
+  4. **Khắc phục lỗi cắt chữ Header Widget (`LAN Mon...`)**:
+     - Thêm `.minimumScaleFactor(0.8)` và `.lineLimit(1)` cho tiêu đề "LAN Monitor" trên tất cả các view của Widget (Small, Medium, Empty).
+  5. **Cải tiến khởi tạo Flutter MethodChannel trên AppDelegate**:
+     - Duyệt scene an toàn (`UIWindowScene`) để đảm bảo kênh `com.lanmonitor/widget` luôn được đăng ký chính xác ngay cả khi `window?.rootViewController` chưa sẵn sàng ở bước `didFinishLaunchingWithOptions`.
+- **Phiên bản & Tag**: `v1.2.4` (Build 21)
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert HEAD --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa**:
+  - `ios_app/LANMonitorWidget/LANMonitorWidget.swift` & `ios_app/ios_widget/LANMonitorWidget.swift`:
+    - Thêm hàm `getDefaultHosts()` trả về `100.66.18.111`.
+    - Thêm hàm `filterLegacyHosts()` loại bỏ các IP mẫu cũ.
+    - Cập nhật `getTimeline()` và `getSnapshot()` tự động dự phòng sang `getDefaultHosts()` thay vì kết thúc sớm với danh sách rỗng.
+    - Cấu hình `allowsCellularAccess = true` và timeout 5.0s trong `checkHostStatus()`.
+    - Thêm `minimumScaleFactor(0.8)` cho tiêu đề để chống cắt chữ `"LAN Mon..."`.
+  - `ios_app/patch_app_delegate.py`:
+    - Bổ sung `setupChannelIfNeeded` an toàn qua `UIWindowScene` và dynamic `group.\(bundleId)`.
+  - `ios_app/App.entitlements` & `ios_app/LANMonitorWidget/LANMonitorWidget.entitlements`:
+    - Bổ sung thêm App Group `group.com.lanmonitor`.
+  - `ios_app/pubspec.yaml`, `ios_app/configure_widget_target.rb`, `ios_app/LANMonitorWidget/Info.plist`, `ios_app/ios_widget/Info.plist`, `.github/workflows/build_ios.yml`:
+    - Đồng bộ nâng phiên bản lên `v1.2.4` (Build `21`).
+
+---
+
 ## [v1.2.3] - 2026-11-16 (Build 20)
 - **Mục tiêu thay đổi**:
   1. **Thay đổi thiết bị mặc định sang Tailscale IP `100.66.18.111`**: Thiết lập máy mặc định duy nhất là `"Máy tính (Tailscale)"` với IP `100.66.18.111`, port `8765`.

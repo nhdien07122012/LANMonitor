@@ -118,51 +118,57 @@ func formatWidgetUptime(_ seconds: Double) -> String {
 
 // MARK: - Provider
 struct Provider: TimelineProvider {
-    private let suiteNames = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app"]
+    private var suiteNames: [String] {
+        var list = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app", "group.com.lanmonitor"]
+        if let bundleId = Bundle.main.bundleIdentifier {
+            let baseId = bundleId.replacingOccurrences(of: ".LANMonitorWidgetExtension", with: "")
+            list.append("group.\(baseId)")
+        }
+        return list
+    }
 
     func placeholder(in context: Context) -> SimpleEntry {
         createPreviewEntry()
     }
 
     func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
-        let cached = loadCachedHosts()
-        if !cached.isEmpty {
-            let online = cached.filter { $0.isOnline }.count
-            completion(SimpleEntry(date: Date(), hosts: cached, onlineCount: online, totalCount: cached.count))
-        } else {
+        if context.isPreview {
             completion(createPreviewEntry())
+            return
         }
+        var cached = loadCachedHosts()
+        if cached.isEmpty {
+            cached = getDefaultHosts()
+        }
+        let online = cached.filter { $0.isOnline }.count
+        completion(SimpleEntry(date: Date(), hosts: cached, onlineCount: online, totalCount: cached.count))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
-        let cachedHosts = loadCachedHosts()
-        if cachedHosts.isEmpty {
-            let entry = SimpleEntry(date: Date(), hosts: [], onlineCount: 0, totalCount: 0)
-            let nextDate = Calendar.current.date(byAdding: .minute, value: 5, to: Date()) ?? Date().addingTimeInterval(300)
-            completion(Timeline(entries: [entry], policy: .after(nextDate)))
-            return
+        var hosts = loadCachedHosts()
+        if hosts.isEmpty {
+            hosts = getDefaultHosts()
         }
 
         let token = loadToken()
         let lastUpdatedMs = loadLastUpdated()
         let nowMs = Date().timeIntervalSince1970 * 1000.0
-        let isCacheFreshFromApp = (nowMs - lastUpdatedMs) < 180000.0 // Trong vòng 3 phút kể từ lần app đồng bộ
+        let isCacheFreshFromApp = (nowMs - lastUpdatedMs) < 180000.0 && lastUpdatedMs > 0
 
         let group = DispatchGroup()
         let lock = NSLock()
-        var updatedHosts = cachedHosts
+        var updatedHosts = hosts
 
-        for index in 0..<cachedHosts.count {
+        for index in 0..<hosts.count {
             group.enter()
-            let host = cachedHosts[index]
+            let host = hosts[index]
             checkHostStatus(host: host, token: token) { updated in
                 lock.lock()
                 if updated.isOnline {
                     updatedHosts[index] = updated
                 } else {
-                    // Nếu truy vấn mạng trực tiếp từ widget bị lỗi (thường do sandbox mạng nội bộ của iOS khi widget chạy nền),
-                    // nhưng app chính vừa mới đồng bộ máy đó là Online, ta giữ nguyên trạng thái Online của app
-                    // để tránh chập chờn báo Offline sai lệch!
+                    // Nếu mạng nền widget thất bại nhưng app chính vừa mới đồng bộ là Online,
+                    // giữ nguyên Online từ app
                     if isCacheFreshFromApp && host.isOnline {
                         updatedHosts[index] = host
                     } else {
@@ -178,7 +184,7 @@ struct Provider: TimelineProvider {
             self.saveCachedHosts(hosts: updatedHosts)
             let online = updatedHosts.filter { $0.isOnline }.count
             let entry = SimpleEntry(date: Date(), hosts: updatedHosts, onlineCount: online, totalCount: updatedHosts.count)
-            let nextDate = Calendar.current.date(byAdding: .minute, value: 2, to: Date()) ?? Date().addingTimeInterval(120)
+            let nextDate = Calendar.current.date(byAdding: .minute, value: 1, to: Date()) ?? Date().addingTimeInterval(60)
             let timeline = Timeline(entries: [entry], policy: .after(nextDate))
             completion(timeline)
         }
@@ -196,7 +202,7 @@ struct Provider: TimelineProvider {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 2.5
+        request.timeoutInterval = 5.0
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         if !token.isEmpty {
             request.setValue(token, forHTTPHeaderField: "X-LAN-Monitor-Token")
@@ -204,8 +210,10 @@ struct Provider: TimelineProvider {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 2.5
-        config.timeoutIntervalForResource = 2.5
+        config.allowsCellularAccess = true
+        config.waitsForConnectivity = false
+        config.timeoutIntervalForRequest = 5.0
+        config.timeoutIntervalForResource = 5.0
         let session = URLSession(configuration: config)
 
         let task = session.dataTask(with: request) { data, response, error in
@@ -238,6 +246,23 @@ struct Provider: TimelineProvider {
         task.resume()
     }
 
+    private func getDefaultHosts() -> [HostWidgetItem] {
+        return [
+            HostWidgetItem(
+                id: "host_tailscale",
+                name: "Máy tính (Tailscale)",
+                ip: "100.66.18.111",
+                port: 8765,
+                isOnline: false,
+                status: "Đang kết nối...",
+                cpuPercent: 0.0,
+                ramPercent: 0.0,
+                netSpeed: "--",
+                uptime: "--"
+            )
+        ]
+    }
+
     private func createPreviewEntry() -> SimpleEntry {
         let sampleHosts = [
             HostWidgetItem(id: "host_tailscale", name: "Máy tính (Tailscale)", ip: "100.66.18.111", port: 8765, isOnline: true, status: "Online", cpuPercent: 35.0, ramPercent: 58.0, netSpeed: "1.2 MB/s", uptime: "14d 6h")
@@ -246,6 +271,19 @@ struct Provider: TimelineProvider {
     }
 
     // MARK: - Cache & Storage
+    private func filterLegacyHosts(_ hosts: [HostWidgetItem]) -> [HostWidgetItem] {
+        return hosts.filter { host in
+            let ip = host.ip.trimmingCharacters(in: .whitespacesAndNewlines)
+            if ip == "192.168.1.10" || ip == "100.100.100.100" || ip == "127.0.0.1" || ip == "--" || ip.isEmpty {
+                return false
+            }
+            if host.name == "Máy cơ quan" || host.name.contains("Talescale-Máy") || host.name == "PC" {
+                return false
+            }
+            return true
+        }
+    }
+
     private func loadCachedHosts() -> [HostWidgetItem] {
         let keysToCheck = ["widget_hosts_json", "hosts_json"]
 
@@ -254,8 +292,9 @@ struct Provider: TimelineProvider {
             if let defs = UserDefaults(suiteName: suite) {
                 for key in keysToCheck {
                     if let jsonStr = defs.string(forKey: key), let data = jsonStr.data(using: .utf8) {
-                        if let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: data), !hosts.isEmpty {
-                            return hosts
+                        if let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: data) {
+                            let valid = filterLegacyHosts(hosts)
+                            if !valid.isEmpty { return valid }
                         }
                     }
                 }
@@ -267,19 +306,21 @@ struct Provider: TimelineProvider {
                     for key in keysToCheck {
                         if let jsonStr = dict[key] as? String,
                            let jsonData = jsonStr.data(using: .utf8),
-                           let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: jsonData), !hosts.isEmpty {
-                            return hosts
+                           let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: jsonData) {
+                            let valid = filterLegacyHosts(hosts)
+                            if !valid.isEmpty { return valid }
                         }
                     }
                 }
             }
         }
 
-        // 2. Dự phòng Standard UserDefaults
+        // 2. Dự phòng Standard UserDefaults (Widget's own cache)
         for key in keysToCheck {
             if let jsonStr = UserDefaults.standard.string(forKey: key), let data = jsonStr.data(using: .utf8) {
-                if let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: data), !hosts.isEmpty {
-                    return hosts
+                if let hosts = try? JSONDecoder().decode([HostWidgetItem].self, from: data) {
+                    let valid = filterLegacyHosts(hosts)
+                    if !valid.isEmpty { return valid }
                 }
             }
         }
@@ -399,14 +440,14 @@ struct SmallWidgetView: View {
     }
 
     var topHost: HostWidgetItem? {
-        activeHosts.first
+        activeHosts.first ?? entry.hosts.first
     }
 
     var body: some View {
         Group {
             if activeHosts.isEmpty {
                 emptyView
-            } else if activeHosts.count == 1, let host = topHost {
+            } else if activeHosts.count == 1, let host = activeHosts.first {
                 singleHostView(host: host)
             } else {
                 multiHostsView
@@ -420,11 +461,13 @@ struct SmallWidgetView: View {
         VStack(spacing: 5) {
             HStack(spacing: 4) {
                 Image(systemName: "desktopcomputer")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(theme.iconTintColor)
                 Text("LAN Monitor")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 10.5, weight: .bold))
                     .foregroundColor(theme.titleColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Spacer()
                 Circle()
                     .fill(theme.offlineColor)
@@ -487,7 +530,7 @@ struct SmallWidgetView: View {
 
             // Tên máy (hiển thị tối đa 2 dòng, tự co giãn nhẹ font để không bao giờ bị dấu 3 chấm ...)
             Text(host.name)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundColor(theme.titleColor)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
@@ -547,8 +590,10 @@ struct SmallWidgetView: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(theme.iconTintColor)
                 Text("LAN Monitor")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 10.5, weight: .bold))
                     .foregroundColor(theme.titleColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Spacer()
                 HStack(spacing: 3) {
                     Circle()
@@ -638,6 +683,8 @@ struct MediumWidgetView: View {
                 Text("LAN Monitor")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(theme.titleColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Spacer()
                 HStack(spacing: 4) {
                     Circle()
