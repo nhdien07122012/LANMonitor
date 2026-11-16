@@ -152,11 +152,19 @@ class MonitorProvider extends ChangeNotifier {
   void _syncPrimaryHostToWidget() {
     if (_hosts.isNotEmpty) {
       final primary = _hosts.first;
+      final hostToken = (primary.token != null && primary.token!.isNotEmpty)
+          ? primary.token!
+          : _globalToken;
+      final tailscale = primary.metrics?.tailscaleIp ?? '';
+
       if (primary.isOnline == true && primary.metrics != null) {
         final m = primary.metrics!;
         _syncWidget(
           hostName: primary.name,
           ip: primary.ip,
+          tailscaleIp: tailscale,
+          port: primary.port,
+          token: hostToken,
           isOnline: true,
           cpu: m.cpuPercent,
           ram: m.ramPercent,
@@ -171,6 +179,9 @@ class MonitorProvider extends ChangeNotifier {
         _syncWidget(
           hostName: primary.name,
           ip: primary.ip,
+          tailscaleIp: tailscale,
+          port: primary.port,
+          token: hostToken,
           isOnline: false,
         );
       }
@@ -178,6 +189,7 @@ class MonitorProvider extends ChangeNotifier {
       _syncWidget(
         hostName: 'Chưa có máy',
         ip: '--',
+        port: 8765,
         isOnline: false,
       );
     }
@@ -186,6 +198,9 @@ class MonitorProvider extends ChangeNotifier {
   Future<void> _syncWidget({
     required String hostName,
     required String ip,
+    String tailscaleIp = '',
+    int port = 8765,
+    String token = '',
     required bool isOnline,
     double cpu = 0.0,
     double ram = 0.0,
@@ -197,10 +212,14 @@ class MonitorProvider extends ChangeNotifier {
   }) async {
     final status = isOnline ? 'Online' : 'Mất kết nối';
     final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final tokenToUse = token.isNotEmpty ? token : _globalToken;
 
     final data = <String, dynamic>{
       'widget_host': hostName,
       'widget_ip': ip,
+      'widget_tailscale_ip': tailscaleIp,
+      'widget_port': port,
+      'widget_token': tokenToUse,
       'widget_is_online': isOnline,
       'widget_status': status,
       'widget_cpu_val': isOnline ? cpu : 0.0,
@@ -223,6 +242,9 @@ class MonitorProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('widget_host', hostName);
       await prefs.setString('widget_ip', ip);
+      await prefs.setString('widget_tailscale_ip', tailscaleIp);
+      await prefs.setInt('widget_port', port);
+      await prefs.setString('widget_token', tokenToUse);
       await prefs.setBool('widget_is_online', isOnline);
       await prefs.setString('widget_status', status);
       await prefs.setDouble('widget_cpu_val', isOnline ? cpu : 0.0);
@@ -233,9 +255,6 @@ class MonitorProvider extends ChangeNotifier {
       await prefs.setString('widget_net_speed', isOnline ? netSpeed : '--');
       await prefs.setString('widget_uptime', isOnline ? uptime : '--');
       await prefs.setInt('widget_last_updated', timestamp);
-      if (_globalToken.isNotEmpty) {
-        await prefs.setString('widget_token', _globalToken);
-      }
     } catch (_) {}
   }
 

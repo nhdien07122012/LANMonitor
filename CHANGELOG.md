@@ -4,6 +4,31 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.1.5] - 2026-11-16 (Build 15)
+- **Mục tiêu thay đổi**: Khắc phục triệt để vấn đề Widget không đồng bộ dữ liệu với PC. Áp dụng kiến trúc Direct Network Fetching độc lập (theo mô hình hoạt động của Gas Manager), cấp quyền `NSAppTransportSecurity` (`NSAllowsArbitraryLoads`) cho Widget Extension, hỗ trợ Widget tự động truy vấn HTTP trực tiếp tới PC Agent theo chu kỳ 1 phút, tự động chuyển vùng dự phòng giữa IP LAN và IP Tailscale.
+- **Commit SHA**: `PENDING_COMMIT_SHA`
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert PENDING_COMMIT_SHA --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa**:
+  - `ios_app/LANMonitorWidget/LANMonitorWidget.swift` & `ios_app/ios_widget/LANMonitorWidget.swift`:
+    - Bổ sung cấu trúc `AgentMetricsResponse: Codable` giải mã trực tiếp dữ liệu phần cứng (`cpu_percent`, `ram_percent`, `disk_percent`, `download_bps`, `upload_bps`, `uptime_sec`, `hostname`, `ip`, `tailscale_ip`) từ endpoint `http://<ip>:<port>/metrics` của PC Agent.
+    - Cài đặt hàm `fetchLiveMetrics` & `executeMetricRequest` sử dụng `URLSession` độc lập với timeout 3.5s, kèm header `X-LAN-Monitor-Token`.
+    - Hỗ trợ cơ chế Fallback thông minh: Thử kết nối IP LAN trước, nếu mất kết nối hoặc ở ngoài nhà sẽ tự động thử kết nối IP Tailscale.
+    - Tự động ghi nhớ và lưu trữ đệm (`saveCache`) dữ liệu mới nhất vào App Group UserDefaults và `widget_data.json`.
+    - `getTimeline()`: Yêu cầu WidgetKit làm mới dữ liệu độc lập sau mỗi 1 phút (`policy: .after(nextDate)`).
+  - `ios_app/LANMonitorWidget/Info.plist` & `ios_app/ios_widget/Info.plist`:
+    - Cấp quyền `NSAppTransportSecurity` với `NSAllowsArbitraryLoads = true` cho Widget Extension, cho phép WidgetKit gửi HTTP request nội bộ trong mạng LAN (`192.168.x.x`) và mạng VPN Tailscale (`100.x.x.x`).
+  - `ios_app/lib/providers/monitor_provider.dart`:
+    - Truyền thêm `tailscaleIp`, `port`, và `token` của máy chủ chính sang native widget qua MethodChannel và SharedPreferences.
+  - `ios_app/patch_app_delegate.py`:
+    - Tối ưu luồng đăng ký MethodChannel `com.lanmonitor/widget`, đồng bộ dữ liệu sang cả hai nhóm App Group (`group.com.lanmonitor.lanMonitor` và `group.com.lanmonitor.app`) và ghi tệp JSON shared container.
+  - `ios_app/pubspec.yaml`, `ios_app/configure_widget_target.rb`, `.github/workflows/build_ios.yml`:
+    - Nâng phiên bản đồng bộ lên `v1.1.5` (Build `15`).
+
+---
+
 ## [v1.1.4] - 2026-11-16 (Build 14)
 - **Mục tiêu thay đổi**: Khắc phục triệt để lỗi Widget báo online nhưng các thanh tiến trình không chạy (hiển thị 0%). Sửa lỗi đăng ký MethodChannel native trong `AppDelegate.swift`, bổ sung cơ chế đồng bộ kép đa tầng (App Group UserDefaults + file `widget_data.json` trong Shared Container), loại bỏ trạng thái Online giả lập khi chưa có dữ liệu đồng bộ từ ứng dụng.
 - **Commit SHA**: `fbcef95`

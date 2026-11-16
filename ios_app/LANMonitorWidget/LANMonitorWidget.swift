@@ -21,36 +21,237 @@ struct SimpleEntry: TimelineEntry {
     let uptime: String
 }
 
+struct AgentMetricsResponse: Codable {
+    let cpu_percent: Double?
+    let ram_percent: Double?
+    let disk_percent: Double?
+    let download_bps: Double?
+    let upload_bps: Double?
+    let uptime_sec: Double?
+    let hostname: String?
+    let ip: String?
+    let tailscale_ip: String?
+
+    enum CodingKeys: String, CodingKey {
+        case cpu_percent, ram_percent, disk_percent, download_bps, upload_bps, uptime_sec, hostname, ip, tailscale_ip
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        cpu_percent = try? container.decodeIfPresent(Double.self, forKey: .cpu_percent)
+        ram_percent = try? container.decodeIfPresent(Double.self, forKey: .ram_percent)
+        disk_percent = try? container.decodeIfPresent(Double.self, forKey: .disk_percent)
+        download_bps = try? container.decodeIfPresent(Double.self, forKey: .download_bps)
+        upload_bps = try? container.decodeIfPresent(Double.self, forKey: .upload_bps)
+        hostname = try? container.decodeIfPresent(String.self, forKey: .hostname)
+        ip = try? container.decodeIfPresent(String.self, forKey: .ip)
+        tailscale_ip = try? container.decodeIfPresent(String.self, forKey: .tailscale_ip)
+
+        if let upDbl = try? container.decodeIfPresent(Double.self, forKey: .uptime_sec) {
+            uptime_sec = upDbl
+        } else if let upInt = try? container.decodeIfPresent(Int.self, forKey: .uptime_sec) {
+            uptime_sec = Double(upInt)
+        } else {
+            uptime_sec = nil
+        }
+    }
+}
+
+struct CachedHostConfig {
+    var hostName: String
+    var ip: String
+    var tailscaleIp: String
+    var port: Int
+    var token: String
+    var cachedEntry: SimpleEntry
+}
+
+// MARK: - Helpers
+func formatWidgetSpeed(_ bps: Double) -> String {
+    if bps < 1024 {
+        return String(format: "%.0f B/s", bps)
+    } else if bps < 1024 * 1024 {
+        return String(format: "%.1f KB/s", bps / 1024.0)
+    } else if bps < 1024 * 1024 * 1024 {
+        return String(format: "%.1f MB/s", bps / (1024.0 * 1024.0))
+    } else {
+        return String(format: "%.1f GB/s", bps / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+func formatWidgetUptime(_ seconds: Double) -> String {
+    let totalSec = Int(seconds)
+    if totalSec <= 0 { return "--" }
+    let days = totalSec / 86400
+    let hours = (totalSec % 86400) / 3600
+    let minutes = (totalSec % 3600) / 60
+    if days > 0 {
+        return "\(days)d \(hours)h"
+    } else if hours > 0 {
+        return "\(hours)h \(minutes)m"
+    } else {
+        return "\(minutes)m"
+    }
+}
+
 // MARK: - Provider
 struct Provider: TimelineProvider {
+    private let suiteNames = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app"]
+
     func placeholder(in context: Context) -> SimpleEntry {
-        createDefaultEntry()
+        loadLocalCache().cachedEntry
     }
 
     func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
-        completion(createDefaultEntry())
+        completion(loadLocalCache().cachedEntry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
-        let entry = createDefaultEntry()
-        let intervalMinutes = entry.isOnline ? 3 : 1
-        let nextDate = Calendar.current.date(byAdding: .minute, value: intervalMinutes, to: Date()) ?? Date().addingTimeInterval(Double(intervalMinutes * 60))
-        let timeline = Timeline(entries: [entry], policy: .after(nextDate))
-        completion(timeline)
+        let config = loadLocalCache()
+        fetchLiveMetrics(config: config) { entry in
+            let nextDate = Calendar.current.date(byAdding: .minute, value: 1, to: Date()) ?? Date().addingTimeInterval(60)
+            let timeline = Timeline(entries: [entry], policy: .after(nextDate))
+            completion(timeline)
+        }
     }
 
-    private func createDefaultEntry() -> SimpleEntry {
-        let suiteNames = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app"]
+    // MARK: - Network Fetching (Gas Manager Architecture)
+    private func fetchLiveMetrics(config: CachedHostConfig, completion: @escaping (SimpleEntry) -> Void) {
+        let targetIp = config.ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !targetIp.isEmpty && targetIp != "--" && targetIp != "127.0.0.1" else {
+            completion(config.cachedEntry)
+            return
+        }
+
+        // 1. Thử gửi HTTP request trực tiếp tới IP LAN
+        executeMetricRequest(ip: targetIp, port: config.port, token: config.token) { result in
+            if let entry = result {
+                self.saveCache(config: config, entry: entry)
+                completion(entry)
+                return
+            }
+
+            // 2. Nếu IP LAN không phản hồi và có IP Tailscale khác IP LAN, thử tiếp Tailscale
+            let tsIp = config.tailscaleIp.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !tsIp.isEmpty && tsIp != targetIp && tsIp != "--" {
+                self.executeMetricRequest(ip: tsIp, port: config.port, token: config.token) { tsResult in
+                    if let tsEntry = tsResult {
+                        self.saveCache(config: config, entry: tsEntry)
+                        completion(tsEntry)
+                        return
+                    }
+                    let offlineEntry = self.makeOfflineEntry(config: config)
+                    self.saveCache(config: config, entry: offlineEntry)
+                    completion(offlineEntry)
+                }
+            } else {
+                let offlineEntry = self.makeOfflineEntry(config: config)
+                self.saveCache(config: config, entry: offlineEntry)
+                completion(offlineEntry)
+            }
+        }
+    }
+
+    private func executeMetricRequest(ip: String, port: Int, token: String, completion: @escaping (SimpleEntry?) -> Void) {
+        guard let url = URL(string: "http://\(ip):\(port)/metrics") else {
+            completion(nil)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 3.5
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        if !token.isEmpty {
+            request.setValue(token, forHTTPHeaderField: "X-LAN-Monitor-Token")
+        }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 3.5
+        config.timeoutIntervalForResource = 3.5
+        let session = URLSession(configuration: config)
+
+        let task = session.dataTask(with: request) { data, response, error in
+            defer { session.finishTasksAndInvalidate() }
+
+            guard error == nil,
+                  let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode),
+                  let data = data else {
+                completion(nil)
+                return
+            }
+
+            do {
+                let metrics = try JSONDecoder().decode(AgentMetricsResponse.self, from: data)
+                let cpuVal = metrics.cpu_percent ?? 0.0
+                let ramVal = metrics.ram_percent ?? 0.0
+                let diskVal = metrics.disk_percent ?? 0.0
+                let downBps = metrics.download_bps ?? 0.0
+                let upBps = metrics.upload_bps ?? 0.0
+                let uptimeSec = metrics.uptime_sec ?? 0.0
+
+                let entry = SimpleEntry(
+                    date: Date(),
+                    hostName: metrics.hostname ?? ip,
+                    ip: ip,
+                    status: "Online",
+                    isOnline: true,
+                    cpu: String(format: "%.0f%%", cpuVal),
+                    cpuPercent: cpuVal,
+                    ram: String(format: "%.0f%%", ramVal),
+                    ramPercent: ramVal,
+                    disk: String(format: "%.0f%%", diskVal),
+                    diskPercent: diskVal,
+                    downloadSpeed: "↓ " + formatWidgetSpeed(downBps),
+                    uploadSpeed: "↑ " + formatWidgetSpeed(upBps),
+                    netSpeed: formatWidgetSpeed(downBps),
+                    uptime: formatWidgetUptime(uptimeSec)
+                )
+                completion(entry)
+            } catch {
+                completion(nil)
+            }
+        }
+        task.resume()
+    }
+
+    private func makeOfflineEntry(config: CachedHostConfig) -> SimpleEntry {
+        SimpleEntry(
+            date: Date(),
+            hostName: config.hostName.isEmpty ? "PC" : config.hostName,
+            ip: config.ip.isEmpty ? "--" : config.ip,
+            status: "Mất kết nối",
+            isOnline: false,
+            cpu: "--",
+            cpuPercent: 0.0,
+            ram: "--",
+            ramPercent: 0.0,
+            disk: "--",
+            diskPercent: 0.0,
+            downloadSpeed: "↓ --",
+            uploadSpeed: "↑ --",
+            netSpeed: "--",
+            uptime: "--"
+        )
+    }
+
+    // MARK: - Cache & Storage
+    private func loadLocalCache() -> CachedHostConfig {
         var loadedDict: [String: Any] = [:]
 
         // 1. Ưu tiên đọc từ App Group UserDefaults
         for suite in suiteNames {
             if let defs = UserDefaults(suiteName: suite), let h = defs.string(forKey: "widget_host"), !h.isEmpty {
-                for key in ["widget_host", "widget_ip", "widget_status", "widget_down_speed", "widget_up_speed", "widget_net_speed", "widget_uptime"] {
+                for key in ["widget_host", "widget_ip", "widget_tailscale_ip", "widget_token", "widget_status", "widget_down_speed", "widget_up_speed", "widget_net_speed", "widget_uptime"] {
                     if let val = defs.string(forKey: key) { loadedDict[key] = val }
                 }
                 for key in ["widget_cpu_val", "widget_ram_val", "widget_disk_val", "widget_last_updated"] {
                     if defs.object(forKey: key) != nil { loadedDict[key] = defs.double(forKey: key) }
+                }
+                if defs.object(forKey: "widget_port") != nil {
+                    loadedDict["widget_port"] = defs.integer(forKey: "widget_port")
                 }
                 if defs.object(forKey: "widget_is_online") != nil {
                     loadedDict["widget_is_online"] = defs.bool(forKey: "widget_is_online")
@@ -79,6 +280,9 @@ struct Provider: TimelineProvider {
             if let h = defs.string(forKey: "widget_host") ?? defs.string(forKey: "flutter.widget_host"), !h.isEmpty {
                 loadedDict["widget_host"] = h
                 loadedDict["widget_ip"] = defs.string(forKey: "widget_ip") ?? defs.string(forKey: "flutter.widget_ip")
+                loadedDict["widget_tailscale_ip"] = defs.string(forKey: "widget_tailscale_ip") ?? defs.string(forKey: "flutter.widget_tailscale_ip")
+                loadedDict["widget_token"] = defs.string(forKey: "widget_token") ?? defs.string(forKey: "flutter.widget_token")
+                loadedDict["widget_port"] = defs.integer(forKey: "widget_port") != 0 ? defs.integer(forKey: "widget_port") : defs.integer(forKey: "flutter.widget_port")
                 loadedDict["widget_status"] = defs.string(forKey: "widget_status") ?? defs.string(forKey: "flutter.widget_status")
                 loadedDict["widget_is_online"] = (defs.object(forKey: "widget_is_online") as? NSNumber)?.boolValue ?? (defs.object(forKey: "flutter.widget_is_online") as? NSNumber)?.boolValue
                 loadedDict["widget_cpu_val"] = defs.double(forKey: "widget_cpu_val") > 0 ? defs.double(forKey: "widget_cpu_val") : defs.double(forKey: "flutter.widget_cpu_val")
@@ -92,9 +296,14 @@ struct Provider: TimelineProvider {
             }
         }
 
-        // Nếu hoàn toàn chưa có dữ liệu đồng bộ
+        let host = loadedDict["widget_host"] as? String ?? "LAN Monitor"
+        let ip = loadedDict["widget_ip"] as? String ?? "--"
+        let tailscaleIp = loadedDict["widget_tailscale_ip"] as? String ?? ""
+        let portVal = loadedDict["widget_port"] as? Int ?? ((loadedDict["widget_port"] as? NSNumber)?.intValue ?? 8765)
+        let token = loadedDict["widget_token"] as? String ?? ""
+
         if loadedDict.isEmpty {
-            return SimpleEntry(
+            let emptyEntry = SimpleEntry(
                 date: Date(),
                 hostName: "Chưa kết nối",
                 ip: "Mở app để đồng bộ",
@@ -111,10 +320,8 @@ struct Provider: TimelineProvider {
                 netSpeed: "--",
                 uptime: "--"
             )
+            return CachedHostConfig(hostName: host, ip: ip, tailscaleIp: tailscaleIp, port: portVal, token: token, cachedEntry: emptyEntry)
         }
-
-        let host = loadedDict["widget_host"] as? String ?? "LAN Monitor"
-        let ip = loadedDict["widget_ip"] as? String ?? "--"
 
         let isOnlinePref: Bool
         if let val = loadedDict["widget_is_online"] as? Bool {
@@ -138,60 +345,71 @@ struct Provider: TimelineProvider {
         let isStale = (lastUpdatedMs > 0) && ((nowMs - lastUpdatedMs) > 300000)
         let effectiveOnline = isOnlinePref && !isStale
 
-        let statusText: String
-        if !effectiveOnline {
-            if isStale {
-                statusText = "Mất kết nối (Quá hạn)"
-            } else {
-                statusText = loadedDict["widget_status"] as? String ?? "Mất kết nối"
-            }
-        } else {
-            statusText = loadedDict["widget_status"] as? String ?? "Online"
-        }
+        let statusText = effectiveOnline ? "Online" : (isStale ? "Mất kết nối (Quá hạn)" : (loadedDict["widget_status"] as? String ?? "Mất kết nối"))
 
-        let cpuVal: Double
-        let ramVal: Double
-        let diskVal: Double
-        let downSpeed: String
-        let upSpeed: String
-        let netSpeed: String
-        let uptime: String
+        let cpuVal: Double = effectiveOnline ? ((loadedDict["widget_cpu_val"] as? Double) ?? ((loadedDict["widget_cpu_val"] as? NSNumber)?.doubleValue ?? 0.0)) : 0.0
+        let ramVal: Double = effectiveOnline ? ((loadedDict["widget_ram_val"] as? Double) ?? ((loadedDict["widget_ram_val"] as? NSNumber)?.doubleValue ?? 0.0)) : 0.0
+        let diskVal: Double = effectiveOnline ? ((loadedDict["widget_disk_val"] as? Double) ?? ((loadedDict["widget_disk_val"] as? NSNumber)?.doubleValue ?? 0.0)) : 0.0
+        let downSpeed: String = effectiveOnline ? (loadedDict["widget_down_speed"] as? String ?? "↓ 0 B/s") : "↓ --"
+        let upSpeed: String = effectiveOnline ? (loadedDict["widget_up_speed"] as? String ?? "↑ 0 B/s") : "↑ --"
+        let netSpeed: String = effectiveOnline ? (loadedDict["widget_net_speed"] as? String ?? "0 B/s") : "--"
+        let uptime: String = effectiveOnline ? (loadedDict["widget_uptime"] as? String ?? "--") : "--"
 
-        if effectiveOnline {
-            cpuVal = (loadedDict["widget_cpu_val"] as? Double) ?? ((loadedDict["widget_cpu_val"] as? NSNumber)?.doubleValue ?? 0.0)
-            ramVal = (loadedDict["widget_ram_val"] as? Double) ?? ((loadedDict["widget_ram_val"] as? NSNumber)?.doubleValue ?? 0.0)
-            diskVal = (loadedDict["widget_disk_val"] as? Double) ?? ((loadedDict["widget_disk_val"] as? NSNumber)?.doubleValue ?? 0.0)
-            downSpeed = loadedDict["widget_down_speed"] as? String ?? "↓ 0 B/s"
-            upSpeed = loadedDict["widget_up_speed"] as? String ?? "↑ 0 B/s"
-            netSpeed = loadedDict["widget_net_speed"] as? String ?? "0 B/s"
-            uptime = loadedDict["widget_uptime"] as? String ?? "--"
-        } else {
-            cpuVal = 0.0
-            ramVal = 0.0
-            diskVal = 0.0
-            downSpeed = "↓ --"
-            upSpeed = "↑ --"
-            netSpeed = "--"
-            uptime = "--"
-        }
-
-        return SimpleEntry(
+        let entry = SimpleEntry(
             date: Date(),
             hostName: host,
             ip: ip,
             status: statusText,
             isOnline: effectiveOnline,
-            cpu: effectiveOnline ? "\(Int(cpuVal))%" : "--",
+            cpu: effectiveOnline ? String(format: "%.0f%%", cpuVal) : "--",
             cpuPercent: cpuVal,
-            ram: effectiveOnline ? "\(Int(ramVal))%" : "--",
+            ram: effectiveOnline ? String(format: "%.0f%%", ramVal) : "--",
             ramPercent: ramVal,
-            disk: effectiveOnline ? "\(Int(diskVal))%" : "--",
+            disk: effectiveOnline ? String(format: "%.0f%%", diskVal) : "--",
             diskPercent: diskVal,
             downloadSpeed: downSpeed,
             uploadSpeed: upSpeed,
             netSpeed: netSpeed,
             uptime: uptime
         )
+
+        return CachedHostConfig(hostName: host, ip: ip, tailscaleIp: tailscaleIp, port: portVal, token: token, cachedEntry: entry)
+    }
+
+    private func saveCache(config: CachedHostConfig, entry: SimpleEntry) {
+        let timestamp = Date().timeIntervalSince1970 * 1000.0
+        let dict: [String: Any] = [
+            "widget_host": entry.hostName,
+            "widget_ip": entry.ip,
+            "widget_tailscale_ip": config.tailscaleIp,
+            "widget_port": config.port,
+            "widget_token": config.token,
+            "widget_is_online": entry.isOnline,
+            "widget_status": entry.status,
+            "widget_cpu_val": entry.cpuPercent,
+            "widget_ram_val": entry.ramPercent,
+            "widget_disk_val": entry.diskPercent,
+            "widget_down_speed": entry.downloadSpeed,
+            "widget_up_speed": entry.uploadSpeed,
+            "widget_net_speed": entry.netSpeed,
+            "widget_uptime": entry.uptime,
+            "widget_last_updated": timestamp
+        ]
+
+        for suite in suiteNames {
+            if let defs = UserDefaults(suiteName: suite) {
+                for (k, v) in dict {
+                    defs.set(v, forKey: k)
+                }
+                defs.synchronize()
+            }
+            if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
+                let fileURL = containerURL.appendingPathComponent("widget_data.json")
+                if let data = try? JSONSerialization.data(withJSONObject: dict, options: []) {
+                    try? data.write(to: fileURL)
+                }
+            }
+        }
     }
 }
 

@@ -17,15 +17,20 @@
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.1.4</string>
+    <string>1.1.5</string>
     <key>CFBundleVersion</key>
-    <string>14</string>
+    <string>15</string>
     <key>MinimumOSVersion</key>
     <string>15.0</string>
     <key>CFBundleSupportedPlatforms</key>
     <array>
         <string>iPhoneOS</string>
     </array>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
     <key>NSExtension</key>
     <dict>
         <key>NSExtensionPointIdentifier</key>

@@ -16,51 +16,36 @@ import WidgetKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-
-    // Call super first to ensure window and rootViewController are properly initialized
-    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
-
-    // Retrieve FlutterViewController after window initialization
-    let rootVC = window?.rootViewController ?? UIApplication.shared.windows.first?.rootViewController
-    if let controller = rootVC as? FlutterViewController {
-      let channel = FlutterMethodChannel(name: "com.lanmonitor/widget", binaryMessenger: controller.binaryMessenger)
-      channel.setMethodCallHandler { (call: FlutterMethodCall, resultHandler: @escaping FlutterResult) in
-        if call.method == "updateWidget", let args = call.arguments as? [String: Any] {
-          let suiteNames = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app"]
-          
-          // 1. Write to App Group UserDefaults
-          for suite in suiteNames {
-            if let defaults = UserDefaults(suiteName: suite) {
-              for (key, val) in args {
-                defaults.set(val, forKey: key)
-              }
-              defaults.synchronize()
+    let controller: FlutterViewController = window?.rootViewController as! FlutterViewController
+    let channel = FlutterMethodChannel(name: "com.lanmonitor/widget", binaryMessenger: controller.binaryMessenger)
+    channel.setMethodCallHandler { (call: FlutterMethodCall, resultHandler: @escaping FlutterResult) in
+      if call.method == "updateWidget", let args = call.arguments as? [String: Any] {
+        let suiteNames = ["group.com.lanmonitor.lanMonitor", "group.com.lanmonitor.app"]
+        for suite in suiteNames {
+          if let defs = UserDefaults(suiteName: suite) {
+            for (k, v) in args {
+              defs.set(v, forKey: k)
+            }
+            defs.synchronize()
+          }
+          if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
+            let fileURL = url.appendingPathComponent("widget_data.json")
+            if let data = try? JSONSerialization.data(withJSONObject: args) {
+              try? data.write(to: fileURL)
             }
           }
-
-          // 2. Dual redundancy: Write to shared App Group container JSON file
-          for suite in suiteNames {
-            if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suite) {
-              let fileURL = containerURL.appendingPathComponent("widget_data.json")
-              if let jsonData = try? JSONSerialization.data(withJSONObject: args, options: []) {
-                try? jsonData.write(to: fileURL)
-              }
-            }
-          }
-
-          // 3. Request WidgetKit reload immediately
-          if #available(iOS 14.0, *) {
-            WidgetCenter.shared.reloadAllTimelines()
-          }
-          resultHandler(true)
-        } else {
-          resultHandler(FlutterMethodNotImplemented)
         }
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadAllTimelines()
+        }
+        resultHandler(true)
+      } else {
+        resultHandler(FlutterMethodNotImplemented)
       }
     }
 
-    return result
+    GeneratedPluginRegistrant.register(with: self)
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }
 """

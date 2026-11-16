@@ -214,8 +214,8 @@ jobs:
           with open(ext_plist, 'rb') as f:
               ext_pl = plistlib.load(f)
 
-          version = app_pl.get('CFBundleShortVersionString', '1.1.4')
-          build = app_pl.get('CFBundleVersion', '14')
+          version = app_pl.get('CFBundleShortVersionString', '1.1.5')
+          build = app_pl.get('CFBundleVersion', '15')
           app_id = app_pl.get('CFBundleIdentifier', 'com.lanmonitor.lanMonitor')
           min_os = app_pl.get('MinimumOSVersion', '15.0')
 
@@ -227,6 +227,7 @@ jobs:
           ext_pl['CFBundleExecutable'] = 'LANMonitorWidgetExtension'
           ext_pl['MinimumOSVersion'] = min_os
           ext_pl['CFBundlePackageType'] = 'XPC!'
+          ext_pl['NSAppTransportSecurity'] = {'NSAllowsArbitraryLoads': True}
           ext_pl['NSExtension'] = {'NSExtensionPointIdentifier': 'com.apple.widgetkit-extension'}
 
           with open(ext_plist, 'wb') as f:
@@ -271,9 +272,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.1.4
-          name: "LAN Monitor iOS v1.1.4"
-          body: "Bản v1.1.4: Khắc phục triệt để lỗi Widget báo online nhưng các thanh tiến trình không chạy (hiển thị 0%). Sửa lỗi đăng ký MethodChannel native, bổ sung cơ chế đồng bộ kép (App Group UserDefaults + widget_data.json trong Shared Container), loại bỏ trạng thái Online giả lập khi chưa có dữ liệu đồng bộ."
+          tag_name: v1.1.5
+          name: "LAN Monitor iOS v1.1.5"
+          body: "Bản v1.1.5: Tích hợp kiến trúc đồng bộ mạng trực tiếp (Direct Network Fetching giống Gas Manager) độc lập cho iOS Widget. Widget tự động gửi request HTTP trực tiếp đến PC Agent trên mạng LAN hoặc Tailscale, giải phóng 100% sự phụ thuộc vào ứng dụng chính; cấp quyền NSAppTransportSecurity cho Extension."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false
