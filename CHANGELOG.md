@@ -8,10 +8,10 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 - **Mục tiêu thay đổi**:
   1. Chuyển đổi Widget từ theo dõi chi tiết 1 máy thành **Widget Giám sát Trạng thái Toàn bộ Máy tính (Hosts Status Overview)**: hiển thị danh sách các máy, trạng thái Online/Offline, số lượng máy đang chạy; hỗ trợ bấm trực tiếp vào từng máy trên widget để mở app và điều hướng thẳng đến màn hình chi tiết thông số qua deep link (`lanmonitor://host?id=...`).
   2. Bổ sung tính năng **Đồng bộ và Nạp Cấu hình `dashboard_config.json`** chuẩn như phiên bản Windows: hỗ trợ đồng bộ Online qua URL, dán JSON từ bộ nhớ tạm, khôi phục từ file gốc và xuất cấu hình (Export).
-- **Commit SHA**: `PENDING_COMMIT_SHA`
+- **Commit SHA**: `332a8ba`
 - **Lệnh hoàn tác mẫu (Rollback)**:
   ```bash
-  git revert PENDING_COMMIT_SHA --no-edit
+  git revert 332a8ba --no-edit
   ```
 - **Chi tiết kỹ thuật các file đã chỉnh sửa**:
   - `ios_app/LANMonitorWidget/LANMonitorWidget.swift` & `ios_app/ios_widget/LANMonitorWidget.swift`:
