@@ -154,7 +154,7 @@ jobs:
           echo "=== Building LANMonitorWidgetExtension with xcodebuild ==="
           xcodebuild \
             -project ios/Runner.xcodeproj \
-            -target LANMonitorWidgetExtension \
+            -scheme LANMonitorWidgetExtension \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build_widget \
