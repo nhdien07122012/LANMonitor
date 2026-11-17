@@ -147,6 +147,29 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
+          // Section 2.5: Tuỳ chọn hiển thị (Ẩn máy Offline)
+          Text('HIỂN THỊ & GIAO DIỆN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: secondaryText)),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cardBorder),
+            ),
+            child: SwitchListTile(
+              secondary: Icon(
+                provider.hideOffline ? CupertinoIcons.eye_slash_fill : CupertinoIcons.eye,
+                color: const Color(0xFF0284C7),
+              ),
+              title: Text('Chỉ hiện máy Online', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: primaryText)),
+              subtitle: Text('Tự động ẩn các máy đang mất kết nối (Offline) giống phiên bản Windows.', style: TextStyle(fontSize: 12, color: secondaryText)),
+              value: provider.hideOffline,
+              activeColor: const Color(0xFF0284C7),
+              onChanged: (val) => provider.setHideOffline(val),
+            ),
+          ),
+          const SizedBox(height: 20),
+
           // Section 3: Quản lý thiết bị
           Text('QUẢN LÝ THIẾT BỊ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: secondaryText)),
           const SizedBox(height: 8),
@@ -214,7 +237,7 @@ class SettingsScreen extends StatelessWidget {
               children: [
                 Text('LAN Monitor Dashboard for iOS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: secondaryText)),
                 const SizedBox(height: 2),
-                Text('Phiên bản 1.0.0 (Build IPA)', style: TextStyle(fontSize: 11, color: secondaryText.withOpacity(0.7))),
+                Text('Phiên bản 1.2.6 (Build 23)', style: TextStyle(fontSize: 11, color: secondaryText.withOpacity(0.7))),
               ],
             ),
           ),

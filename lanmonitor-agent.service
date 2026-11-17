@@ -1,0 +1,22 @@
+[Unit]
+Description=LAN Monitor Linux Agent
+After=network.target tailscaled.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lanmonitor
+ExecStart=/usr/bin/python3 /opt/lanmonitor/agent_linux.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lanmonitor-agent
+
+# Tối ưu tài nguyên cho TV Box ARM
+LimitNOFILE=65536
+MemoryMax=50M
+
+[Install]
+WantedBy=multi-user.target

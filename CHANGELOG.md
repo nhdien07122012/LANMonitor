@@ -4,6 +4,37 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.2.6] - 2026-11-17 (Build 23)
+- **Mục tiêu thay đổi**:
+  1. **Thêm tính năng Ẩn các máy mất kết nối / Ngoại tuyến (Hide Offline Hosts) trên iOS App**:
+     - Bổ sung tùy chọn `hideOffline` đồng bộ và tương thích 100% với tính năng `hide_offline` trên bản Windows Dashboard.
+     - Khi kích hoạt, danh sách máy tính trên màn hình chính sẽ tự động ẩn tất cả các thiết bị đang mất kết nối / lỗi timeout.
+     - Thêm thanh thông báo footer khi đang ẩn máy: `"Đang ẩn X máy Offline • Chạm để hiện"`, giúp người dùng dễ dàng bật lại toàn bộ danh sách khi cần.
+     - Màn hình trống thông minh: Khi tất cả thiết bị đều đang tắt/offline, hiển thị thông báo trạng thái kèm nút `"Hiện tất cả máy tính"`.
+  2. **Thao tác nhanh trên AppBar & Cài đặt**:
+     - Thêm nút biểu tượng con mắt (`CupertinoIcons.eye` / `CupertinoIcons.eye_slash_fill`) trên thanh AppBar để bật/tắt nhanh 1 chạm kèm rung nhẹ (Haptic Feedback) và SnackBar thông báo.
+     - Viên thuốc thống kê số lượng Online/Offline trên AppBar cũng có thể bấm trực tiếp để chuyển đổi chế độ lọc. Khi bật lọc, số máy offline được gạch ngang trực quan.
+     - Thêm công tắc `"Chỉ hiện máy Online"` trong mục `HIỂN THỊ & GIAO DIỆN` tại màn hình `SettingsScreen`.
+  3. **Đồng bộ hóa cấu hình & Cơ sở dữ liệu mặc định**:
+     - Đồng bộ hóa trường `hide_offline` vào các hàm `importConfigJson`, `exportConfigJson` và lưu trữ cục bộ qua `SharedPreferences`.
+     - Cập nhật danh sách máy mẫu gốc trong file tài nguyên `assets/dashboard_config.json` bổ sung máy chủ TX3 Mini (`100.107.51.80`).
+  4. **Bảo toàn 100% các chức năng cốt lõi**:
+     - Giữ nguyên toàn bộ logic giám sát, thời gian cập nhật, gửi lệnh điều khiển từ xa, đồng bộ qua Gist/URL và theme giao diện.
+- **Phiên bản & Tag**: `v1.2.6` (Build 23)
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert HEAD --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa**:
+  - `ios_app/lib/providers/monitor_provider.dart`: Thêm `_hideOffline`, getter `hideOffline`, getter danh sách lọc `displayedHosts`, các phương thức `setHideOffline`, `toggleHideOffline`, nạp/lưu qua `SharedPreferences`, đồng bộ qua `importConfigJson` và `exportConfigJson`.
+  - `ios_app/lib/screens/dashboard_screen.dart`: Bổ sung IconButton bật/tắt mắt lọc trên AppBar, hỗ trợ chạm vào viên thuốc đếm Online/Offline, cập nhật hiển thị `displayedHosts`, thêm footer đếm máy ẩn và màn hình rỗng khi tất cả máy offline.
+  - `ios_app/lib/screens/settings_screen.dart`: Bổ sung section `HIỂN THỊ & GIAO DIỆN` với switch `Chỉ hiện máy Online`, cập nhật phiên bản hiển thị `v1.2.6 (Build 23)`.
+  - `ios_app/assets/dashboard_config.json` & `dashboard_config.json`: Cập nhật cấu hình có chứa TX3 Mini.
+  - `ios_app/pubspec.yaml`: Nâng version lên `1.2.6+23`.
+  - `.github/workflows/build_ios.yml`: Nâng release tag lên `v1.2.6`.
+
+---
+
 ## [v1.2.5] - 2026-11-16 (Build 22)
 - **Mục tiêu thay đổi**:
   1. **Loại bỏ hoàn toàn iOS Home Screen Widget & WidgetKit Extension**:

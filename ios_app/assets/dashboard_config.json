@@ -5,6 +5,10 @@
     {
       "name": "Máy tính (Tailscale)",
       "ip": "100.66.18.111"
+    },
+    {
+      "name": "TX3 Mini (Armbian)",
+      "ip": "100.107.51.80"
     }
   ],
   "apps": {

@@ -176,9 +176,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.2.5
-          name: "LAN Monitor iOS v1.2.5"
-          body: "Bản v1.2.5: Loại bỏ hoàn toàn WidgetKit Extension, App Group và các thành phần liên quan đến Widget trong app theo yêu cầu người dùng. Giữ nguyên 100% tất cả tính năng giám sát máy tính, đồng bộ Gist, điều khiển từ xa."
+          tag_name: v1.2.6
+          name: "LAN Monitor iOS v1.2.6"
+          body: "Bản v1.2.6 (Build 23): Bổ sung tính năng 'Chỉ hiện máy Online (Ẩn các máy mất kết nối/Offline)' trên ứng dụng iOS giống phiên bản Dashboard Windows. Hỗ trợ bật/tắt nhanh bằng nút con mắt hoặc chạm trực tiếp vào viên thuốc thống kê trên thanh AppBar."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false

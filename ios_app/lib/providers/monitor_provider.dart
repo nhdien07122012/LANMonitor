@@ -13,6 +13,7 @@ class MonitorProvider extends ChangeNotifier {
   String _globalToken = 'LANMONITOR-CHANGE-ME';
   int _refreshInterval = 2; // seconds
   bool _isAutoRefresh = true;
+  bool _hideOffline = false;
   Timer? _timer;
 
   // Cấu hình đồng bộ online từ URL
@@ -32,6 +33,11 @@ class MonitorProvider extends ChangeNotifier {
   };
 
   List<HostModel> get hosts => _hosts;
+  bool get hideOffline => _hideOffline;
+  List<HostModel> get displayedHosts {
+    if (!_hideOffline) return _hosts;
+    return _hosts.where((h) => h.isOnline != false).toList();
+  }
   String get globalToken => _globalToken;
   int get refreshInterval => _refreshInterval;
   bool get isAutoRefresh => _isAutoRefresh;
@@ -52,6 +58,7 @@ class MonitorProvider extends ChangeNotifier {
     _globalToken = prefs.getString('global_token') ?? 'LANMONITOR-CHANGE-ME';
     _refreshInterval = prefs.getInt('refresh_interval') ?? 2;
     _isAutoRefresh = prefs.getBool('is_auto_refresh') ?? true;
+    _hideOffline = prefs.getBool('hide_offline') ?? false;
     _configSyncUrl = prefs.getString('config_sync_url') ??
         'https://gist.githubusercontent.com/nhdien07122012/f540d4882c4c87e2dc799975faa57a03/raw/dashboard_config.json';
     _autoSyncOnlineConfig = prefs.getBool('auto_sync_online_config') ?? false;
@@ -132,6 +139,17 @@ class MonitorProvider extends ChangeNotifier {
     await prefs.setBool('is_auto_refresh', enabled);
     _startTimer();
     notifyListeners();
+  }
+
+  void setHideOffline(bool val) async {
+    _hideOffline = val;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hide_offline', val);
+    notifyListeners();
+  }
+
+  void toggleHideOffline() {
+    setHideOffline(!_hideOffline);
   }
 
   void setRefreshInterval(int seconds) async {
@@ -302,6 +320,12 @@ class MonitorProvider extends ChangeNotifier {
       addedLinks = _customLinks.length;
     }
 
+    // 5. Cấu hình ẩn máy Offline (giống bản Windows)
+    if (config['hide_offline'] != null && config['hide_offline'] is bool) {
+      _hideOffline = config['hide_offline'] as bool;
+      await prefs.setBool('hide_offline', _hideOffline);
+    }
+
     notifyListeners();
     refreshAll();
 
@@ -355,7 +379,7 @@ class MonitorProvider extends ChangeNotifier {
       'apps': _customApps,
       'links': _customLinks,
       'notify_offline': true,
-      'hide_offline': false,
+      'hide_offline': _hideOffline,
       'minimal_style': 'digital_pill',
       'minimal_layout': 'vertical',
     };
