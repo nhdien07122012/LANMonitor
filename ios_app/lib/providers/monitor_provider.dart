@@ -168,23 +168,34 @@ class MonitorProvider extends ChangeNotifier {
     refreshAll();
   }
 
-  Future<void> refreshAll() async {
-    final futures = _hosts.map((host) async {
-      try {
-        final metrics = await LanMonitorApi.fetchMetrics(host, _globalToken);
-        host.isOnline = true;
-        host.metrics = metrics;
-        host.errorMessage = null;
-        host.lastChecked = DateTime.now();
-      } catch (e) {
-        host.isOnline = false;
-        host.errorMessage = e.toString().replaceAll('Exception: ', '');
-        host.lastChecked = DateTime.now();
-      }
-    });
+  bool _isRefreshing = false;
+  bool get isRefreshing => _isRefreshing;
 
-    await Future.wait(futures);
-    notifyListeners();
+  Future<void> refreshAll() async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+    try {
+      final futures = _hosts.map((host) async {
+        try {
+          final metrics = await LanMonitorApi.fetchMetrics(host, _globalToken);
+          host.isOnline = true;
+          host.metrics = metrics;
+          host.errorMessage = null;
+          host.lastChecked = DateTime.now();
+          notifyListeners();
+        } catch (e) {
+          host.isOnline = false;
+          host.errorMessage = LanMonitorApi.formatError(e);
+          host.lastChecked = DateTime.now();
+          notifyListeners();
+        }
+      });
+
+      await Future.wait(futures);
+    } finally {
+      _isRefreshing = false;
+      notifyListeners();
+    }
   }
 
   void addHost(HostModel host) {

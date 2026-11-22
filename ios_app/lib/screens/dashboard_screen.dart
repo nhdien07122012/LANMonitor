@@ -124,15 +124,17 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
       appBar: AppBar(
         backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
         elevation: 0,
+        titleSpacing: 10,
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(CupertinoIcons.desktopcomputer, size: 22, color: Color(0xFF0284C7)),
-            const SizedBox(width: 8),
+            const Icon(CupertinoIcons.desktopcomputer, size: 20, color: Color(0xFF0284C7)),
+            const SizedBox(width: 6),
             Text(
               'LAN Monitor',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                fontSize: 18,
+                fontSize: 16,
                 color: primaryText,
               ),
             ),
@@ -185,9 +187,11 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           ),
           // Nút bật/tắt Chỉ hiện máy Online (Eye toggle giống Windows)
           IconButton(
+            padding: const EdgeInsets.all(5),
+            constraints: const BoxConstraints(),
             icon: Icon(
               provider.hideOffline ? CupertinoIcons.eye_slash_fill : CupertinoIcons.eye,
-              size: 21,
+              size: 20,
             ),
             color: provider.hideOffline ? const Color(0xFF38BDF8) : secondaryText,
             tooltip: provider.hideOffline ? 'Đang ẩn máy Offline (Chạm để hiện tất cả)' : 'Chỉ hiện máy Online (Ẩn máy Offline)',
@@ -206,7 +210,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
             },
           ),
           IconButton(
-            icon: const Icon(CupertinoIcons.arrow_2_circlepath_circle, size: 21),
+            padding: const EdgeInsets.all(5),
+            constraints: const BoxConstraints(),
+            icon: const Icon(CupertinoIcons.arrow_2_circlepath_circle, size: 20),
             color: const Color(0xFF0284C7),
             tooltip: 'Đồng bộ cấu hình JSON',
             onPressed: () {
@@ -217,13 +223,17 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
             },
           ),
           IconButton(
-            icon: const Icon(CupertinoIcons.plus_circle, size: 22),
+            padding: const EdgeInsets.all(5),
+            constraints: const BoxConstraints(),
+            icon: const Icon(CupertinoIcons.plus_circle, size: 21),
             color: const Color(0xFF0284C7),
             tooltip: 'Thêm máy tính',
             onPressed: () => _showAddHostDialog(context),
           ),
           IconButton(
-            icon: const Icon(CupertinoIcons.gear, size: 22),
+            padding: const EdgeInsets.all(5),
+            constraints: const BoxConstraints(),
+            icon: const Icon(CupertinoIcons.gear, size: 20),
             color: secondaryText,
             tooltip: 'Cài đặt',
             onPressed: () {
@@ -233,6 +243,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
               );
             },
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: RefreshIndicator(

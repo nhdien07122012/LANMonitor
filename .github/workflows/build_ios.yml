@@ -176,9 +176,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
-          tag_name: v1.2.6
-          name: "LAN Monitor iOS v1.2.6"
-          body: "Bản v1.2.6 (Build 23): Bổ sung tính năng 'Chỉ hiện máy Online (Ẩn các máy mất kết nối/Offline)' trên ứng dụng iOS giống phiên bản Dashboard Windows. Hỗ trợ bật/tắt nhanh bằng nút con mắt hoặc chạm trực tiếp vào viên thuốc thống kê trên thanh AppBar."
+          tag_name: v1.2.7
+          name: "LAN Monitor iOS v1.2.7"
+          body: "Bản v1.2.7 (Build 24): Tối ưu hóa toàn diện tính ổn định kết nối qua Tailscale/4G. Tăng timeout lên 6s, áp dụng HTTP Keep-Alive persistent connection, chống nghẽn request lặp lại (re-entrance guard), cập nhật card ngay lập tức khi từng máy phản hồi và sửa lỗi cắt chữ tiêu đề AppBar."
           files: LANMonitor_iOS.ipa
           draft: false
           prerelease: false

@@ -5,14 +5,36 @@ import '../models/host_model.dart';
 import '../models/metrics_model.dart';
 
 class LanMonitorApi {
-  static const Duration timeoutDuration = Duration(seconds: 3);
+  // Tăng thời gian chờ lên 6 giây để tương thích tối ưu với độ trễ bắt tay mạng Tailscale / DERP Relay trên 4G/LTE
+  static const Duration timeoutDuration = Duration(seconds: 6);
+
+  // Tái sử dụng HTTP Client duy nhất để giữ kết nối Persistent (HTTP Keep-Alive), tránh handshake liên tục
+  static final http.Client _client = http.Client();
+
+  /// Chuẩn hóa lỗi thân thiện với người dùng
+  static String formatError(dynamic e) {
+    final str = e.toString();
+    if (e is TimeoutException || str.contains('TimeoutException')) {
+      return 'Hết thời gian chờ kết nối (>6s)';
+    }
+    if (str.contains('Connection refused') || str.contains('errno = 61') || str.contains('errno = 111')) {
+      return 'Không thể kết nối cổng 8765 (Agent chưa chạy hoặc sai cổng)';
+    }
+    if (str.contains('No route to host') || str.contains('Network is unreachable') || str.contains('SocketException')) {
+      return 'Không tìm thấy thiết bị (Kiểm tra Tailscale/Wi-Fi)';
+    }
+    if (str.contains('Unauthorized') || str.contains('401')) {
+      return 'Sai mã Secret Token bảo mật';
+    }
+    return str.replaceAll('Exception: ', '').replaceAll('ClientException: ', '');
+  }
 
   /// Fetch metrics from the agent
   static Future<MetricsModel> fetchMetrics(HostModel host, String globalToken) async {
     final token = (host.token != null && host.token!.isNotEmpty) ? host.token! : globalToken;
     final uri = Uri.parse('${host.endpointUrl}/metrics');
 
-    final response = await http.get(
+    final response = await _client.get(
       uri,
       headers: {
         'Accept': 'application/json',
@@ -47,14 +69,14 @@ class LanMonitorApi {
       if (url != null) 'url': url,
     };
 
-    final response = await http.post(
+    final response = await _client.post(
       uri,
       headers: {
         'Content-Type': 'application/json',
         if (token.isNotEmpty) 'X-LAN-Monitor-Token': token,
       },
       body: json.encode(bodyData),
-    ).timeout(const Duration(seconds: 5));
+    ).timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 200) {
       return json.decode(utf8.decode(response.bodyBytes));

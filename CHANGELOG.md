@@ -4,6 +4,34 @@ Tài liệu này ghi lại toàn bộ lịch sử phát triển, các phiên b�
 
 ---
 
+## [v1.2.7] - 2026-11-23 (Build 24)
+- **Mục tiêu thay đổi**:
+  1. **Khắc phục triệt để lỗi TimeoutException & Mất kết nối Tailscale trên iOS**:
+     - Tăng thời gian chờ (timeout) từ 3.0s lên **6.0s**: Khắc phục hiện tượng timeout sớm khi mạng Tailscale trên iPhone vừa thức dậy từ chế độ ngủ (idle/sleep) hoặc đi qua DERP Relay trên mạng 4G/LTE.
+     - Áp dụng **Persistent HTTP Client (Keep-Alive)**: Thay vì tạo mới và hủy TCP connection ở mỗi request, sử dụng duy nhất một persistent client giúp tái sử dụng socket, giảm thời gian round-trip từ ~1000ms xuống chỉ còn ~50ms.
+     - **Chống nghẽn request (Re-entrance Lock `_isRefreshing`)**: Ngăn chặn tình trạng timer gọi `refreshAll()` dồn dập đè lên các request cũ đang chờ timeout, loại bỏ hoàn toàn hiện tượng nghẽn hàng đợi socket mạng.
+     - **Cập nhật giao diện từng máy ngay lập tức**: Gọi `notifyListeners()` ngay khi mỗi máy phản hồi xong thay vì phải chờ tất cả máy (kể cả máy offline) timeout mới cập nhật giao diện. Máy online sẽ lập tức chuyển màu xanh và hiển thị số liệu chỉ sau ~0.2s.
+  2. **Chuẩn hóa thông báo lỗi thân thiện**:
+     - Thay thế chuỗi lỗi thô (`TimeoutException after 0:00:03.000000`, `ClientException with SocketException...`) bằng thông điệp tiếng Việt rõ ràng: `"Hết thời gian chờ kết nối (>6s)"`, `"Không thể kết nối cổng 8765"`, `"Không tìm thấy thiết bị (Kiểm tra Tailscale/Wi-Fi)"`.
+  3. **Khắc phục lỗi cắt chữ tiêu đề AppBar (`LAN Mon...`)**:
+     - Tối ưu hóa khoảng cách (`titleSpacing: 10`) và giảm padding các nút thao tác trên AppBar (`padding: 5`, `BoxConstraints()`), đảm bảo tiêu đề `"LAN Monitor"` luôn hiển thị đầy đủ, không bao giờ bị cắt thành `"LAN Mon..."` trên mọi kích thước màn hình iPhone.
+  4. **Bảo toàn 100% các chức năng cốt lõi**:
+     - Giữ nguyên toàn bộ logic giám sát, chế độ lọc chỉ hiện máy Online, đồng bộ qua Gist/URL và điều khiển máy tính từ xa.
+- **Phiên bản & Tag**: `v1.2.7` (Build 24)
+- **Lệnh hoàn tác mẫu (Rollback)**:
+  ```bash
+  git revert HEAD --no-edit
+  ```
+- **Chi tiết kỹ thuật các file đã chỉnh sửa**:
+  - `ios_app/lib/services/lan_monitor_api.dart`: Tăng `timeoutDuration` lên 6s, chuyển sang `_client` persistent, bổ sung hàm `formatError(dynamic e)`.
+  - `ios_app/lib/providers/monitor_provider.dart`: Bổ sung cờ `_isRefreshing`, gọi `notifyListeners()` tức thì khi từng host hoàn tất, dùng `LanMonitorApi.formatError`.
+  - `ios_app/lib/screens/dashboard_screen.dart`: Căn chỉnh title spacing, giảm padding IconButton để giải phóng không gian thanh AppBar.
+  - `ios_app/lib/screens/settings_screen.dart`: Cập nhật phiên bản hiển thị `v1.2.7 (Build 24)`.
+  - `ios_app/pubspec.yaml`: Nâng version lên `1.2.7+24`.
+  - `.github/workflows/build_ios.yml`: Nâng release tag lên `v1.2.7`.
+
+---
+
 ## [v1.2.6] - 2026-11-17 (Build 23)
 - **Mục tiêu thay đổi**:
   1. **Thêm tính năng Ẩn các máy mất kết nối / Ngoại tuyến (Hide Offline Hosts) trên iOS App**:

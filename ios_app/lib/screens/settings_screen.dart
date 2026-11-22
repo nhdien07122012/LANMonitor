@@ -237,7 +237,7 @@ class SettingsScreen extends StatelessWidget {
               children: [
                 Text('LAN Monitor Dashboard for iOS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: secondaryText)),
                 const SizedBox(height: 2),
-                Text('Phiên bản 1.2.6 (Build 23)', style: TextStyle(fontSize: 11, color: secondaryText.withOpacity(0.7))),
+                Text('Phiên bản 1.2.7 (Build 24)', style: TextStyle(fontSize: 11, color: secondaryText.withOpacity(0.7))),
               ],
             ),
           ),
